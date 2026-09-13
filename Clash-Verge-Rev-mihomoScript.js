@@ -412,7 +412,7 @@ function main(config, profileName) {
   ];
 
   // ---------- 7. DNS ----------
-  // DNS 关键行为由脚本明确控制，不再展开继承旧 DNS 对象，避免 whitelist/rule/direct-nameserver 等残留改变语义。
+  // DNS 关键行为由脚本明确控制；国内域名使用国内 DNS 直连，其余域名使用境外 DNS 并经默认代理发送。
   config.dns = {
     enable: true,
     ipv6: false,
@@ -433,44 +433,34 @@ function main(config, profileName) {
       "ntp.*.com"
     ],
 
+    // 仅用于 DNS 上游域名 bootstrap；不承担普通业务域名解析。
     "default-nameserver": [
       "223.5.5.5",
       "119.29.29.29"
     ],
 
-    // 国内 DNS 作为默认解析：优先保证未收录的小众国内域名获得国内结果
+    // 默认 / 境外域名：使用境外 DoH，并明确从默认代理出口发送，避免本地 DNS 暴露查询。
     nameserver: [
-      "https://dns.alidns.com/dns-query",
-      "https://doh.pub/dns-query"
+      "https://1.1.1.1/dns-query#默认代理",
+      "https://8.8.8.8/dns-query#默认代理"
     ],
 
-    // 已知国内域名固定使用国内 DNS
+    // 国内域名：仅使用国内 DoH，并明确直连，保持国内 CDN / GeoDNS 结果。
     "nameserver-policy": {
-      "RULE-SET:SKULL_China,SKULL_Lan": [
-        "https://dns.alidns.com/dns-query",
-        "https://doh.pub/dns-query"
+      "rule-set:SKULL_China": [
+        "https://dns.alidns.com/dns-query#DIRECT",
+        "https://doh.pub/dns-query#DIRECT"
+      ],
+      "rule-set:SKULL_Lan": [
+        "https://dns.alidns.com/dns-query#DIRECT",
+        "https://doh.pub/dns-query#DIRECT"
       ]
     },
 
-    // 境外 DNS 作为后备；非 CN 结果使用 fallback，降低未知国外域名被国内解析污染的风险
-    fallback: [
-      "https://dns.cloudflare.com/dns-query",
-      "https://dns.google/dns-query"
-    ],
-
-    "fallback-filter": {
-      geoip: true,
-      "geoip-code": "CN",
-      ipcidr: [
-        "240.0.0.0/4",
-        "0.0.0.0/32",
-        "127.0.0.1/32"
-      ]
-    },
-
+    // 代理服务器域名必须独立直连解析，避免 nameserver -> 默认代理 -> 节点域名解析形成循环依赖。
     "proxy-server-nameserver": [
-      "https://dns.alidns.com/dns-query",
-      "https://doh.pub/dns-query"
+      "https://dns.alidns.com/dns-query#DIRECT",
+      "https://doh.pub/dns-query#DIRECT"
     ]
   };
 
