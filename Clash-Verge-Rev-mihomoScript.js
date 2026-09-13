@@ -374,7 +374,9 @@ function main(config, profileName) {
     "RULE-SET,SKULL_TelegramIP,Telegram,no-resolve",
     "RULE-SET,SKULL_XIP,X,no-resolve",
     "RULE-SET,SKULL_NetflixIP,Netflix,no-resolve",
-    "RULE-SET,SKULL_ChinaIP,国内直连,no-resolve",
+
+    // 中国 IP 作为未知域名的最终国内兜底：允许触发 DNS 解析
+    "RULE-SET,SKULL_ChinaIP,国内直连",
 
     // 最终
     "MATCH,漏网之鱼"
@@ -411,15 +413,33 @@ function main(config, profileName) {
       "119.29.29.29"
     ],
 
+    // 国内 DNS 作为默认解析：优先保证未收录的小众国内域名获得国内结果
     nameserver: [
-      "https://dns.cloudflare.com/dns-query",
-      "https://dns.google/dns-query"
+      "https://dns.alidns.com/dns-query",
+      "https://doh.pub/dns-query"
     ],
 
+    // 已知国内域名固定使用国内 DNS
     "nameserver-policy": {
       "RULE-SET:SKULL_China,SKULL_Lan": [
         "https://dns.alidns.com/dns-query",
         "https://doh.pub/dns-query"
+      ]
+    },
+
+    // 境外 DNS 作为后备；非 CN 结果使用 fallback，避免未知国外域名被国内解析污染
+    fallback: [
+      "https://dns.cloudflare.com/dns-query",
+      "https://dns.google/dns-query"
+    ],
+
+    "fallback-filter": {
+      geoip: true,
+      "geoip-code": "CN",
+      ipcidr: [
+        "240.0.0.0/4",
+        "0.0.0.0/32",
+        "127.0.0.1/32"
       ]
     },
 
