@@ -25,9 +25,10 @@
 
 新版脚本延续"统一骨架"思路，但对结构做了大幅精简：
 
-- **26 个策略组**（6 基础 + 3 AI + 8 国际服务 + 9 地区），去掉了故障转移、负载均衡等重型组
+- **25 个策略组**（5 基础 + 3 AI + 8 国际服务 + 9 地区），去掉了故障转移、负载均衡等重型组
 - **26 条分流规则** + **20 个 Rule Providers**（全部来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) 的 `.mrs` 格式，每日自动更新）
 - ChatGPT / Claude / Gemini & NotebookLM 三大 AI 服务独立分流，NotebookLM 精确域名优先于通用 Google
+- 国内域名、中国区 Apple、局域网与中国 IP 规则固定走 `DIRECT`，不再经过额外的“国内直连”策略组
 - Bettbox 版支持 **v1.18.8+ 可视化覆写开关**：在 App 界面上直接启停各服务分流，关闭后流量自动回落"国外流量"
 
 ---
@@ -84,7 +85,7 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
         ┌────────────────┼────────────────┐
         ▼                ▼                ▼
   proxy-groups         rules         rule-providers
-   (26 个)           (26 条)           (20 个)
+   (25 个)           (26 条)           (20 个)
         │
         └── dns（Fake-IP + 国内外分流）
                          │
@@ -106,7 +107,7 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
 
 | 项目 | Clash Verge Rev | Bettbox (Android) |
 | --- | --- | --- |
-| 代理组 | **26** | **26** |
+| 代理组 | **25** | **25** |
 | 分流规则 | **26** | **26** |
 | Rule Providers | **20** | **20** |
 
@@ -114,16 +115,17 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
 
 ## 代理组架构
 
-### 基础组（6 个）
+### 基础组（5 个）
 
 | 代理组 | 类型 | 用途 |
 | --- | --- | --- |
 | `全球手动` | `select` | 手动挑选具体节点，始终排第一；已过滤机场伪节点并按地区排序 |
 | `默认代理` | `select` | 默认代理入口，可选 `自动选择` / `全球手动` / 各地区组 / `DIRECT` |
 | `自动选择` | `url-test` | 全部节点自动测速选最优，间隔 300（Verge）/ 600（Bettbox）秒，容差 80ms |
-| `国内直连` | `select` | 默认 `DIRECT`；手动切到 `默认代理` 可让国内流量临时走代理 |
 | `国外流量` | `select` | 通用国外流量出口，也是各服务组开关关闭后的回落目标 |
 | `漏网之鱼` | `select` | 最终 `MATCH` 落点，默认走 `国外流量` |
+
+国内流量不再经过独立策略组：命中局域网、中国大陆域名、中国区 Apple 或中国 IP 规则后直接落到 `DIRECT`。
 
 ### 服务分流组（11 个）
 
@@ -206,15 +208,15 @@ Expire · Expired · Traffic · Remaining · Website
 
 | 顺序 | 规则 | 目标 | 条数 |
 | --- | --- | --- | --- |
-| 1 | `RULE-SET:private`（局域网域名） | `国内直连` | 1 |
+| 1 | `RULE-SET:private`（局域网域名） | `DIRECT` | 1 |
 | 2 | NotebookLM / Gemini 精确域名：`notebooklm.google` · `notebooklm.google.com` · `aistudio.google.com` · `ai.google.dev` · `generativelanguage.googleapis.com` | `Gemini / NotebookLM` | 5 |
 | 3 | `RULE-SET:openai` | `ChatGPT` | 1 |
 | 4 | `RULE-SET:anthropic` | `Claude` | 1 |
 | 5 | `RULE-SET:google-gemini` | `Gemini / NotebookLM` | 1 |
-| 6 | `RULE-SET:apple@cn` — 中国区 Apple 业务 | `国内直连` | 1 |
-| 7 | `RULE-SET:cn` — 中国大陆域名 | `国内直连` | 1 |
+| 6 | `RULE-SET:apple@cn` — 中国区 Apple 业务 | `DIRECT` | 1 |
+| 7 | `RULE-SET:cn` — 中国大陆域名 | `DIRECT` | 1 |
 | 8 | `youtube` / `google` / `github` / `microsoft` / `apple` / `telegram` / `x` / `netflix` | 对应服务组 | 8 |
-| 9 | IP 规则集：`private` → `国内直连`；`google` / `telegram` / `twitter` / `netflix` → 对应服务组；`cn` → `国内直连`（全部带 `no-resolve`） | 对应组 | 6 |
+| 9 | IP 规则集：`private` → `DIRECT`（`no-resolve`）；`google` / `telegram` / `twitter` / `netflix` → 对应服务组（`no-resolve`）；`cn` → `DIRECT`（允许解析） | 对应目标 | 6 |
 | 末 | `MATCH` | `漏网之鱼` | 1 |
 | — | **合计** | — | **26** |
 
@@ -291,7 +293,7 @@ profile:
 | `find-process-mode` | `strict` | `off` | 桌面保留进程查询能力；安卓无进程分流需求 |
 | TUN | 合并补充参数（不改变启用状态） | 不碰 `tun` | 平台机制不同 |
 | 顶层 `ipv6` | 不设置 | `false` | 安卓网络环境更复杂，显式关闭 |
-| 代理组 / 规则 / Rule Providers | 26 / 26 / 20 | 26 / 26 / 20 | 分流结构完全一致 |
+| 代理组 / 规则 / Rule Providers | 25 / 26 / 20 | 25 / 26 / 20 | 分流结构完全一致 |
 
 ---
 
@@ -301,9 +303,9 @@ profile:
 
 代理页 → `ChatGPT` 组 → 选 `🇺🇸 美国`。`美国` 组内是自动测速的美国节点，延迟最优自动切换。Claude、Gemini / NotebookLM 同理，互不影响。
 
-**临时让国内流量也走代理**
+**国内流量固定直连**
 
-代理页 → `国内直连` 组 → 由 `DIRECT` 切到 `默认代理`。所有目标为 `国内直连` 的流量（大陆域名、中国区 Apple、局域网）都会改走代理；切回 `DIRECT` 即恢复。
+局域网、中国大陆域名、中国区 Apple 以及中国 IP 规则命中后直接走 `DIRECT`，不经过可手动切换的中间策略组，因此不会因为代理组选错或 `store-selected` 持久化而意外把国内流量送入代理。
 
 **关闭不需要的服务分流（仅 Bettbox）**
 
