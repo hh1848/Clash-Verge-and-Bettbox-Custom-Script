@@ -93,13 +93,31 @@ function main(config, profileName) {
     sg: "🇸🇬|新加坡|狮城|獅城|Singapore|(?:^|[^A-Za-z])SG(?:P)?(?:[0-9]|[^A-Za-z]|$)",
     jp: "🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|(?:^|[^A-Za-z])JP(?:N)?(?:[0-9]|[^A-Za-z]|$)",
     us: "🇺🇸|美国|美國|美[.·|｜_\\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake(?: ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|(?:^|[^A-Za-z])(?:LAX|SJC|SEA|NYC|PHX|SLC|SFO|DFW|ORD|LAS|IAD|US|USA)(?:[0-9]|[^A-Za-z]|$)",
-    eu: "🇪🇺|🇬🇧|🇩🇪|🇫🇷|🇳🇱|🇪🇸|🇮🇹|🇨🇭|🇸🇪|🇫🇮|🇳🇴|🇵🇱|🇮🇪|🇦🇹|🇧🇪|🇨🇿|🇩🇰|🇵🇹|🇬🇷|🇮🇸|🇱🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|(?:^|[^A-Za-z])(?:EU|UK|GB|GBR|DE|DEU|FR|FRA|NL|NLD|ES|ESP|IT|ITA|CH|CHE|SE|SWE|FI|FIN|NO|NOR|PL|POL|IE|IRL|AT|AUT|BE|BEL|CZ|CZE|DK|DNK|PT|PRT|GR|GRC)(?:[0-9]|[^A-Za-z]|$)"
+    // 挪威保留国旗/中文/英文/NOR；不使用易与 No.01 编号混淆的两字母 NO。
+    eu: "🇪🇺|🇬🇧|🇩🇪|🇫🇷|🇳🇱|🇪🇸|🇮🇹|🇨🇭|🇸🇪|🇫🇮|🇳🇴|🇵🇱|🇮🇪|🇦🇹|🇧🇪|🇨🇿|🇩🇰|🇵🇹|🇬🇷|🇮🇸|🇱🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|Norway|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|(?:^|[^A-Za-z])(?:EU|UK|GB|GBR|DE|DEU|FR|FRA|NL|NLD|ES|ESP|IT|ITA|CH|CHE|SE|SWE|FI|FIN|NOR|PL|POL|IE|IRL|AT|AUT|BE|BEL|CZ|CZE|DK|DNK|PT|PRT|GR|GRC)(?:[0-9]|[^A-Za-z]|$)"
   };
 
+  // 地区优先级同时定义“全球手动”排序和地区组互斥关系。
+  // 若一个名称同时含多个地区标识（如“香港→美国”），只归入最靠前的地区。
   const REGION_KEYS = ["hk", "mo", "tw", "kr", "sg", "jp", "us", "eu"];
 
   const FILTER = Object.fromEntries(
     REGION_KEYS.map((key) => [key, `(?i)(${REGION_PATTERN_BODY[key]})`])
+  );
+
+  const REGION_EXCLUDE = Object.fromEntries(
+    REGION_KEYS.map((key, index) => {
+      const higherPriorityPatterns = REGION_KEYS
+        .slice(0, index)
+        .map((higherKey) => REGION_PATTERN_BODY[higherKey]);
+
+      return [
+        key,
+        higherPriorityPatterns.length > 0
+          ? `(?i)(${PSEUDO_PATTERN_BODY}|${higherPriorityPatterns.join("|")})`
+          : EXCLUDE
+      ];
+    })
   );
 
   const MANUAL_REGION_TESTS = REGION_KEYS.map(
@@ -147,13 +165,13 @@ function main(config, profileName) {
     proxies
   });
 
-  const region = (name, icon, filter) => ({
+  const region = (name, icon, filter, excludeFilter = EXCLUDE) => ({
     name,
     type: "url-test",
     icon,
     "include-all": true,
     filter,
-    "exclude-filter": EXCLUDE,
+    "exclude-filter": excludeFilter,
     url: TEST_URL,
     interval: INTERVAL,
     tolerance: 80,
@@ -222,13 +240,19 @@ function main(config, profileName) {
       name: "全球手动",
       type: "select",
       icon: ICON.manual,
-      proxies: [...manualProxyNames, "DIRECT"],
+      // 纯 provider 场景不显式插入 DIRECT，避免首次加载时 DIRECT 成为首选。
+      ...(manualProxyNames.length > 0
+        ? { proxies: [...manualProxyNames, "DIRECT"] }
+        : providerNames.length === 0
+          ? { proxies: ["REJECT"] }
+          : {}),
       ...(providerNames.length > 0
         ? {
             use: providerNames,
             "exclude-filter": EXCLUDE
           }
-        : {})
+        : {}),
+      "empty-fallback": "REJECT"
     },
 
     select("默认代理", ICON.default, [
@@ -248,7 +272,8 @@ function main(config, profileName) {
       interval: INTERVAL,
       tolerance: 80,
       lazy: true,
-      "expected-status": 204
+      "expected-status": 204,
+      "empty-fallback": "REJECT"
     },
 
     select("国内直连", ICON.direct, [
@@ -282,14 +307,14 @@ function main(config, profileName) {
     select("Netflix", ICON.netflix, SERVICE_OPTIONS),
 
     // 4. 地区节点
-    region("🇭🇰 香港", ICON.hk, FILTER.hk),
-    region("🇲🇴 澳门", ICON.mo, FILTER.mo),
-    region("🇹🇼 台湾", ICON.tw, FILTER.tw),
-    region("🇰🇷 韩国", ICON.kr, FILTER.kr),
-    region("🇸🇬 新加坡", ICON.sg, FILTER.sg),
-    region("🇯🇵 日本", ICON.jp, FILTER.jp),
-    region("🇺🇸 美国", ICON.us, FILTER.us),
-    region("🇪🇺 欧洲", ICON.eu, FILTER.eu),
+    region("🇭🇰 香港", ICON.hk, FILTER.hk, REGION_EXCLUDE.hk),
+    region("🇲🇴 澳门", ICON.mo, FILTER.mo, REGION_EXCLUDE.mo),
+    region("🇹🇼 台湾", ICON.tw, FILTER.tw, REGION_EXCLUDE.tw),
+    region("🇰🇷 韩国", ICON.kr, FILTER.kr, REGION_EXCLUDE.kr),
+    region("🇸🇬 新加坡", ICON.sg, FILTER.sg, REGION_EXCLUDE.sg),
+    region("🇯🇵 日本", ICON.jp, FILTER.jp, REGION_EXCLUDE.jp),
+    region("🇺🇸 美国", ICON.us, FILTER.us, REGION_EXCLUDE.us),
+    region("🇪🇺 欧洲", ICON.eu, FILTER.eu, REGION_EXCLUDE.eu),
 
     {
       name: "其他地区",
