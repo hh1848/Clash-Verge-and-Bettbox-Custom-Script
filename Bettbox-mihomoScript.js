@@ -45,12 +45,14 @@ function main(config) {
 
   const serviceTarget = (name) =>
     featureEnabled(name) ? name : "国外流量";
+
   // ---------- 0. 基础检查：保留机场 proxies / proxy-providers ----------
   const directProxyCount = Array.isArray(config.proxies) ? config.proxies.length : 0;
   const providers = config["proxy-providers"];
-  const providerCount = providers && typeof providers === "object"
-    ? Object.keys(providers).length
-    : 0;
+  const providerNames = providers && typeof providers === "object"
+    ? Object.keys(providers)
+    : [];
+  const providerCount = providerNames.length;
 
   if (directProxyCount === 0 && providerCount === 0) {
     return config;
@@ -60,8 +62,11 @@ function main(config) {
   const INTERVAL = 600;
   const RULE_INTERVAL = 86400;
 
-  // 排除机场的流量信息、到期提醒等伪节点
-  const EXCLUDE = "(?i)(到期|过期|剩余|流量|套餐|官网|网址|订阅|重置|公告|通知|提示|教程|使用说明|使用须知|客服|联系|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire|Expired|Traffic|Remaining|Website)";
+  // 仅排除明确的信息/提醒节点，避免误伤“香港01｜不限流量”等正常节点。
+  const PSEUDO_PATTERN_BODY =
+    "到期|过期|剩余(?:流量|时间|天数|[:：]|\\s*\\d)|流量(?:剩余|到期|重置|[:：]\\s*\\d)|套餐(?:到期|剩余|[:：])|官网(?:地址)?|网址|订阅(?:到期|更新|地址)|(?:下次|距离).*重置|公告(?:[:：]|$)|通知(?:[:：]|$)|提示(?:[:：]|$)|教程(?:[:：]|$)|使用说明|使用须知|客服(?:[:：]|$)|联系(?:客服)?|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire(?:d)?|Traffic(?:\\s*(?:Left|Remaining)|[:：]\\s*\\d)|Remaining(?:\\s*Traffic)?|Website";
+
+  const EXCLUDE = `(?i)(${PSEUDO_PATTERN_BODY})`;
 
   // ---------- 1. 图标 ----------
   const ICON = {
@@ -122,34 +127,54 @@ function main(config) {
   };
 
   // ---------- 2. 节点地区筛选 ----------
-  const FILTER = {
-    hk: "(?i)(🇭🇰|香港|Hong ?Kong|\\bHK(G)?\\b)",
-    mo: "(?i)(🇲🇴|澳门|澳門|Macao|Macau|\\bMO\\b)",
-    tw: "(?i)(🇹🇼|台湾|台灣|Taiwan|Taipei|\\bTW(N)?\\b)",
-    kr: "(?i)(🇰🇷|韩国|韓國|Korea|Seoul|\\bKR\\b|\\bKOR\\b)",
-    sg: "(?i)(🇸🇬|新加坡|狮城|獅城|Singapore|\\bSG(P)?\\b)",
-    jp: "(?i)(🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|\\bJP(N)?\\b)",
-    us: "(?i)(🇺🇸|美国|美國|美[.·|｜_\\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake( ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|\\bLAX\\b|\\bSJC\\b|\\bSEA\\b|\\bNYC\\b|\\bPHX\\b|\\bSLC\\b|\\bSFO\\b|\\bDFW\\b|\\bORD\\b|\\bLAS\\b|\\bIAD\\b|\\bUS(A)?\\b)",
-    eu: "(?i)(🇪🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|\\bEU\\b|\\bUK\\b|\\bGB(R)?\\b|\\bDE(U)?\\b|\\bFR(A)?\\b|\\bNL(D)?\\b)"
+  // 同一套地区规则同时用于 Mihomo filter、其他地区排除和全球手动排序，避免三份规则漂移。
+  const REGION_PATTERN_BODY = {
+    hk: "🇭🇰|香港|Hong ?Kong|(?:^|[^A-Za-z])HK(?:G)?(?:[0-9]|[^A-Za-z]|$)",
+    mo: "🇲🇴|澳门|澳門|Macao|Macau|(?:^|[^A-Za-z])MO(?:[0-9]|[^A-Za-z]|$)",
+    tw: "🇹🇼|台湾|台灣|Taiwan|Taipei|(?:^|[^A-Za-z])TW(?:N)?(?:[0-9]|[^A-Za-z]|$)",
+    kr: "🇰🇷|韩国|韓國|Korea|Seoul|(?:^|[^A-Za-z])(?:KR|KOR)(?:[0-9]|[^A-Za-z]|$)",
+    sg: "🇸🇬|新加坡|狮城|獅城|Singapore|(?:^|[^A-Za-z])SG(?:P)?(?:[0-9]|[^A-Za-z]|$)",
+    jp: "🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|(?:^|[^A-Za-z])JP(?:N)?(?:[0-9]|[^A-Za-z]|$)",
+    us: "🇺🇸|美国|美國|美[.·|｜_\\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake(?: ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|(?:^|[^A-Za-z])(?:LAX|SJC|SEA|NYC|PHX|SLC|SFO|DFW|ORD|LAS|IAD|US|USA)(?:[0-9]|[^A-Za-z]|$)",
+    // 挪威保留国旗/中文/英文/NOR；不使用易与 No.01 编号混淆的两字母 NO。
+    eu: "🇪🇺|🇬🇧|🇩🇪|🇫🇷|🇳🇱|🇪🇸|🇮🇹|🇨🇭|🇸🇪|🇫🇮|🇳🇴|🇵🇱|🇮🇪|🇦🇹|🇧🇪|🇨🇿|🇩🇰|🇵🇹|🇬🇷|🇮🇸|🇱🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|Norway|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|(?:^|[^A-Za-z])(?:EU|UK|GB|GBR|DE|DEU|FR|FRA|NL|NLD|ES|ESP|IT|ITA|CH|CHE|SE|SWE|FI|FIN|NOR|PL|POL|IE|IRL|AT|AUT|BE|BEL|CZ|CZE|DK|DNK|PT|PRT|GR|GRC)(?:[0-9]|[^A-Za-z]|$)"
   };
 
+  // 地区优先级同时定义“全球手动”排序和地区组互斥关系。
+  // 若一个名称同时含多个地区标识（如“香港→美国”），只归入最靠前的地区。
+  const REGION_KEYS = ["hk", "mo", "tw", "kr", "sg", "jp", "us", "eu"];
+
+  // QuickJS 兼容：不用 Object.fromEntries。
+  const FILTER = {};
+  const REGION_EXCLUDE = {};
+
+  for (let i = 0; i < REGION_KEYS.length; i += 1) {
+    const key = REGION_KEYS[i];
+    FILTER[key] = `(?i)(${REGION_PATTERN_BODY[key]})`;
+
+    const higherPriorityPatterns = [];
+    for (let j = 0; j < i; j += 1) {
+      higherPriorityPatterns.push(REGION_PATTERN_BODY[REGION_KEYS[j]]);
+    }
+
+    REGION_EXCLUDE[key] = higherPriorityPatterns.length > 0
+      ? `(?i)(${PSEUDO_PATTERN_BODY}|${higherPriorityPatterns.join("|")})`
+      : EXCLUDE;
+  }
+
+  const MANUAL_REGION_TESTS = REGION_KEYS.map(
+    (key) => new RegExp(`(?:${REGION_PATTERN_BODY[key]})`, "i")
+  );
+
+  const regionPatternList = [];
+  for (let i = 0; i < REGION_KEYS.length; i += 1) {
+    regionPatternList.push(REGION_PATTERN_BODY[REGION_KEYS[i]]);
+  }
+
   const OTHER_EXCLUDE =
-    "(?i)(到期|过期|剩余|流量|套餐|官网|网址|订阅|重置|公告|通知|提示|教程|使用说明|使用须知|客服|联系|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire|Expired|Traffic|Remaining|Website|🇭🇰|香港|Hong ?Kong|\\bHK(G)?\\b|🇲🇴|澳门|澳門|Macao|Macau|\\bMO\\b|🇹🇼|台湾|台灣|Taiwan|Taipei|\\bTW(N)?\\b|🇰🇷|韩国|韓國|Korea|Seoul|\\bKR\\b|\\bKOR\\b|🇸🇬|新加坡|狮城|獅城|Singapore|\\bSG(P)?\\b|🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|\\bJP(N)?\\b|🇺🇸|美国|美國|美[.·|｜_\\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake( ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|\\bLAX\\b|\\bSJC\\b|\\bSEA\\b|\\bNYC\\b|\\bPHX\\b|\\bSLC\\b|\\bSFO\\b|\\bDFW\\b|\\bORD\\b|\\bLAS\\b|\\bIAD\\b|\\bUS(A)?\\b|🇪🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|\\bEU\\b|\\bUK\\b|\\bGB(R)?\\b|\\bDE(U)?\\b|\\bFR(A)?\\b|\\bNL(D)?\\b)";
+    `(?i)(${PSEUDO_PATTERN_BODY}|${regionPatternList.join("|")})`;
 
-  // 全球手动节点固定排序：香港 -> 澳门 -> 台湾 -> 韩国 -> 新加坡 -> 日本 -> 美国 -> 欧洲 -> 其他地区。
-  const MANUAL_REGION_TESTS = [
-    /(?:🇭🇰|香港|Hong ?Kong|\bHK(?:G)?\b)/i,
-    /(?:🇲🇴|澳门|澳門|Macao|Macau|\bMO\b)/i,
-    /(?:🇹🇼|台湾|台灣|Taiwan|Taipei|\bTW(?:N)?\b)/i,
-    /(?:🇰🇷|韩国|韓國|Korea|Seoul|\bKR\b|\bKOR\b)/i,
-    /(?:🇸🇬|新加坡|狮城|獅城|Singapore|\bSG(?:P)?\b)/i,
-    /(?:🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|\bJP(?:N)?\b)/i,
-    /(?:🇺🇸|美国|美國|美[.·|｜_\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake(?: ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|\bLAX\b|\bSJC\b|\bSEA\b|\bNYC\b|\bPHX\b|\bSLC\b|\bSFO\b|\bDFW\b|\bORD\b|\bLAS\b|\bIAD\b|\bUS(?:A)?\b)/i,
-    /(?:🇪🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|\bEU\b|\bUK\b|\bGB(?:R)?\b|\bDE(?:U)?\b|\bFR(?:A)?\b|\bNL(?:D)?\b)/i
-  ];
-
-  const PSEUDO_NODE_RE =
-    /(?:到期|过期|剩余|流量|套餐|官网|网址|订阅|重置|公告|通知|提示|教程|使用说明|使用须知|客服|联系|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire|Expired|Traffic|Remaining|Website)/i;
+  const PSEUDO_NODE_RE = new RegExp(`(?:${PSEUDO_PATTERN_BODY})`, "i");
 
   const manualRegionRank = (name) => {
     for (let i = 0; i < MANUAL_REGION_TESTS.length; i += 1) {
@@ -196,12 +221,6 @@ function main(config) {
         })
     : [];
 
-  // Bettbox / Android：
-  // - 常见“扁平 proxies”订阅继续使用脚本排序，保持 全球手动 的地区顺序；
-  // - 若订阅使用 proxy-providers，则改由 Mihomo 运行时 include-all 动态纳入，
-  //   避免订阅更新后 provider 节点丢失。provider 模式下节点的最终展示顺序由内核决定。
-  const hasProxyProviders = providerCount > 0;
-
   // ---------- 3. 工具函数 ----------
   const select = (name, icon, proxies) => ({
     name,
@@ -210,17 +229,19 @@ function main(config) {
     proxies
   });
 
-  const region = (name, icon, filter) => ({
+  const region = (name, icon, filter, excludeFilter) => ({
     name,
     type: "url-test",
     icon,
     "include-all": true,
     filter,
-    "exclude-filter": EXCLUDE,
+    "exclude-filter": excludeFilter || EXCLUDE,
     url: TEST_URL,
     interval: INTERVAL,
     tolerance: 80,
-    lazy: true
+    lazy: true,
+    "expected-status": 204,
+    "empty-fallback": "REJECT"
   });
 
   const DOMAIN_BASE =
@@ -283,22 +304,19 @@ function main(config) {
       name: "全球手动",
       type: "select",
       icon: ICON.manual,
-
-      ...(hasProxyProviders
+      // 纯 provider 场景不显式插入 DIRECT，避免首次加载时 DIRECT 成为首选。
+      ...(manualProxyNames.length > 0
+        ? { proxies: [...manualProxyNames, "DIRECT"] }
+        : providerNames.length === 0
+          ? { proxies: ["REJECT"] }
+          : {}),
+      ...(providerNames.length > 0
         ? {
-            "include-all": true,
-            "exclude-filter": EXCLUDE,
-            proxies: ["DIRECT"]
+            use: providerNames,
+            "exclude-filter": EXCLUDE
           }
-        : manualProxyNames.length > 0
-          ? {
-              proxies: [...manualProxyNames, "DIRECT"]
-            }
-          : {
-              "include-all": true,
-              "exclude-filter": EXCLUDE,
-              proxies: ["DIRECT"]
-            })
+        : {}),
+      "empty-fallback": "REJECT"
     },
 
     select("默认代理", ICON.default, [
@@ -317,7 +335,9 @@ function main(config) {
       url: TEST_URL,
       interval: INTERVAL,
       tolerance: 80,
-      lazy: true
+      lazy: true,
+      "expected-status": 204,
+      "empty-fallback": "REJECT"
     },
 
     select("国内直连", ICON.direct, [
@@ -351,14 +371,14 @@ function main(config) {
     select("Netflix", ICON.netflix, SERVICE_OPTIONS),
 
     // 4. 地区节点
-    region("🇭🇰 香港", ICON.hk, FILTER.hk),
-    region("🇲🇴 澳门", ICON.mo, FILTER.mo),
-    region("🇹🇼 台湾", ICON.tw, FILTER.tw),
-    region("🇰🇷 韩国", ICON.kr, FILTER.kr),
-    region("🇸🇬 新加坡", ICON.sg, FILTER.sg),
-    region("🇯🇵 日本", ICON.jp, FILTER.jp),
-    region("🇺🇸 美国", ICON.us, FILTER.us),
-    region("🇪🇺 欧洲", ICON.eu, FILTER.eu),
+    region("🇭🇰 香港", ICON.hk, FILTER.hk, REGION_EXCLUDE.hk),
+    region("🇲🇴 澳门", ICON.mo, FILTER.mo, REGION_EXCLUDE.mo),
+    region("🇹🇼 台湾", ICON.tw, FILTER.tw, REGION_EXCLUDE.tw),
+    region("🇰🇷 韩国", ICON.kr, FILTER.kr, REGION_EXCLUDE.kr),
+    region("🇸🇬 新加坡", ICON.sg, FILTER.sg, REGION_EXCLUDE.sg),
+    region("🇯🇵 日本", ICON.jp, FILTER.jp, REGION_EXCLUDE.jp),
+    region("🇺🇸 美国", ICON.us, FILTER.us, REGION_EXCLUDE.us),
+    region("🇪🇺 欧洲", ICON.eu, FILTER.eu, REGION_EXCLUDE.eu),
 
     {
       name: "其他地区",
@@ -370,7 +390,9 @@ function main(config) {
       url: TEST_URL,
       interval: INTERVAL,
       tolerance: 80,
-      lazy: true
+      lazy: true,
+      "expected-status": 204,
+      "empty-fallback": "REJECT"
     }
   ];
 
@@ -495,9 +517,8 @@ function main(config) {
   ];
 
   // ---------- 7. DNS ----------
+  // DNS 关键行为由脚本明确控制，不再展开继承旧 DNS 对象，避免 whitelist/rule/direct-nameserver 等残留改变语义。
   config.dns = {
-    ...(config.dns || {}),
-
     enable: true,
     ipv6: false,
     "prefer-h3": false,
@@ -505,12 +526,9 @@ function main(config) {
 
     "enhanced-mode": "fake-ip",
     "fake-ip-range": "198.18.0.1/16",
+    "fake-ip-filter-mode": "blacklist",
 
     "fake-ip-filter": [
-      ...(config.dns && Array.isArray(config.dns["fake-ip-filter"])
-        ? config.dns["fake-ip-filter"]
-        : []),
-
       "*.lan",
       "*.local",
       "localhost.ptlogin2.qq.com",
@@ -539,7 +557,7 @@ function main(config) {
       ]
     },
 
-    // 境外 DNS 作为后备；非 CN 结果使用 fallback，避免未知国外域名被国内解析污染
+    // 境外 DNS 作为后备；非 CN 结果使用 fallback，降低未知国外域名被国内解析污染的风险
     fallback: [
       "https://dns.cloudflare.com/dns-query",
       "https://dns.google/dns-query"
