@@ -39,9 +39,6 @@ function main(config, profileName) {
     auto:
       "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Auto.png",
 
-    direct:
-      "https://flagcdn.com/w160/cn.png",
-
     final:
       "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Final.png",
 
@@ -276,12 +273,6 @@ function main(config, profileName) {
       "empty-fallback": "REJECT"
     },
 
-    select("国内直连", ICON.direct, [
-      "DIRECT",
-      "默认代理",
-      "全球手动"
-    ]),
-
     select("国外流量", ICON.foreign, FOREIGN_OPTIONS),
 
     select("漏网之鱼", ICON.final, [
@@ -368,7 +359,7 @@ function main(config, profileName) {
   // NotebookLM / Gemini 必须早于通用 Google
   config.rules = [
     // LAN
-    "RULE-SET,SKULL_Lan,国内直连",
+    "RULE-SET,SKULL_Lan,DIRECT",
 
     // AI
     "DOMAIN-SUFFIX,notebooklm.google,Gemini / NotebookLM",
@@ -382,10 +373,10 @@ function main(config, profileName) {
     "RULE-SET,SKULL_Gemini,Gemini / NotebookLM",
 
     // 中国区 Apple 直连
-    "RULE-SET,SKULL_AppleCN,国内直连",
+    "RULE-SET,SKULL_AppleCN,DIRECT",
 
     // 中国大陆域名
-    "RULE-SET,SKULL_China,国内直连",
+    "RULE-SET,SKULL_China,DIRECT",
 
     // 国际服务
     "RULE-SET,SKULL_YouTube,YouTube",
@@ -398,14 +389,14 @@ function main(config, profileName) {
     "RULE-SET,SKULL_Netflix,Netflix",
 
     // IP 规则
-    "RULE-SET,SKULL_LanIP,国内直连,no-resolve",
+    "RULE-SET,SKULL_LanIP,DIRECT,no-resolve",
     "RULE-SET,SKULL_GoogleIP,Google,no-resolve",
     "RULE-SET,SKULL_TelegramIP,Telegram,no-resolve",
     "RULE-SET,SKULL_XIP,X,no-resolve",
     "RULE-SET,SKULL_NetflixIP,Netflix,no-resolve",
 
     // 中国 IP 作为未知域名的最终国内兜底：允许触发 DNS 解析
-    "RULE-SET,SKULL_ChinaIP,国内直连",
+    "RULE-SET,SKULL_ChinaIP,DIRECT",
 
     // 最终
     "MATCH,漏网之鱼"
