@@ -1,0 +1,44 @@
+name: Assemble optimized Clash script
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".upload/optimized.js.xz"
+      - ".github/workflows/assemble-clash-script.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assemble and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          xz -dc .upload/optimized.js.xz > Clash-Verge-Rev-mihomoScript.js
+          node --check Clash-Verge-Rev-mihomoScript.js
+          actual="$(git hash-object Clash-Verge-Rev-mihomoScript.js)"
+          expected="451f709968fd58b9dbeb3e9b45a8f6d1a27f1eb2"
+          test "$actual" = "$expected"
+
+      - name: Commit optimized script
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Clash-Verge-Rev-mihomoScript.js
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Improve Clash Verge script compatibility"
+          git push origin HEAD:main
