@@ -1,4 +1,5 @@
 // Clash Verge Rev 全局扩展脚本
+// Version: 2026.09.13
 // 目标：国内直连、国外代理；ChatGPT / Claude / Gemini & NotebookLM 独立；常用国际服务独立；地区自动测速。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
@@ -16,12 +17,49 @@ function main(config, profileName) {
   }
 
   const TEST_URL = "https://www.gstatic.com/generate_204";
-  const INTERVAL = 300;
+  const INTERVAL = 600;
   const RULE_INTERVAL = 86400;
+
+  // provider 节点的 url-test 依赖 provider 自身 health-check 数据。
+  // 仅补齐缺失项并强制启用，不覆盖机场已有的 url / interval / timeout 等配置。
+  const ensureProviderHealthCheck = (provider) => {
+    if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
+      return;
+    }
+
+    const current =
+      provider["health-check"] &&
+      typeof provider["health-check"] === "object" &&
+      !Array.isArray(provider["health-check"])
+        ? provider["health-check"]
+        : {};
+
+    provider["health-check"] = {
+      ...current,
+      enable: true,
+      url: current.url || TEST_URL,
+      interval:
+        typeof current.interval === "number" && current.interval > 0
+          ? current.interval
+          : INTERVAL,
+      lazy:
+        typeof current.lazy === "boolean"
+          ? current.lazy
+          : true,
+      "expected-status":
+        current["expected-status"] !== undefined
+          ? current["expected-status"]
+          : 204
+    };
+  };
+
+  for (const name of providerNames) {
+    ensureProviderHealthCheck(providers[name]);
+  }
 
   // 仅排除明确的信息/提醒节点，避免误伤“香港01｜不限流量”等正常节点。
   const PSEUDO_PATTERN_BODY =
-    "到期|过期|剩余(?:流量|时间|天数|[:：]|\\s*\\d)|流量(?:剩余|到期|重置|[:：]\\s*\\d)|套餐(?:到期|剩余|[:：])|官网(?:地址)?|网址|订阅(?:到期|更新|地址)|(?:下次|距离).*重置|公告(?:[:：]|$)|通知(?:[:：]|$)|提示(?:[:：]|$)|教程(?:[:：]|$)|使用说明|使用须知|客服(?:[:：]|$)|联系(?:客服)?|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire(?:d)?|Traffic(?:\\s*(?:Left|Remaining)|[:：]\\s*\\d)|Remaining(?:\\s*Traffic)?|Website";
+    "到期|过期|剩余(?:流量|时间|天数|[:：]|\\s*\\d)|流量(?:剩余|到期|重置|[:：]\\s*\\d)|套餐(?:到期|剩余|[:：])|官网(?:地址)?|网址|订阅(?:到期|更新|地址)|(?:下次|距离).*重置|公告(?:[:：]|$)|通知(?:[:：]|$)|提示(?:[:：]|$)|教程(?:[:：]|$)|使用说明|使用须知|客服(?:[:：]|$)|联系(?:客服)?|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire(?:d)?(?:\\s*[:：]|\\s*\\d|$)|Traffic(?:\\s*(?:Left|Remaining)|[:：]\\s*\\d)|Remaining(?:\\s*Traffic)?|Website(?:\\s*[:：]|$)";
 
   const EXCLUDE = `(?i)(${PSEUDO_PATTERN_BODY})`;
 
@@ -89,7 +127,7 @@ function main(config, profileName) {
     kr: "🇰🇷|韩国|韓國|Korea|Seoul|(?:^|[^A-Za-z])(?:KR|KOR)(?:[0-9]|[^A-Za-z]|$)",
     sg: "🇸🇬|新加坡|狮城|獅城|Singapore|(?:^|[^A-Za-z])SG(?:P)?(?:[0-9]|[^A-Za-z]|$)",
     jp: "🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|(?:^|[^A-Za-z])JP(?:N)?(?:[0-9]|[^A-Za-z]|$)",
-    us: "🇺🇸|美国|美國|美[.·|｜_\\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake(?: ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|(?:^|[^A-Za-z])(?:LAX|SJC|SEA|NYC|PHX|SLC|SFO|DFW|ORD|LAS|IAD|US|USA)(?:[0-9]|[^A-Za-z]|$)",
+    us: "🇺🇸|美国|美國|美[.·|｜_\\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake(?: ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|Boston|波士顿|波士頓|Miami|迈阿密|邁阿密|Denver|丹佛|Houston|休斯顿|休士頓|Austin|奥斯汀|奧斯汀|Washington ?D\\.?C\\.?|华盛顿(?:特区)?|華盛頓(?:特區)?|(?:^|[^A-Za-z])(?:LAX|SJC|SEA|NYC|PHX|SLC|SFO|DFW|ORD|LAS|IAD|BOS|MIA|DEN|IAH|HOU|DCA|US|USA)(?:[0-9]|[^A-Za-z]|$)",
     // 挪威保留国旗/中文/英文/NOR；不使用易与 No.01 编号混淆的两字母 NO。
     eu: "🇪🇺|🇬🇧|🇩🇪|🇫🇷|🇳🇱|🇪🇸|🇮🇹|🇨🇭|🇸🇪|🇫🇮|🇳🇴|🇵🇱|🇮🇪|🇦🇹|🇧🇪|🇨🇿|🇩🇰|🇵🇹|🇬🇷|🇮🇸|🇱🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|Norway|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|(?:^|[^A-Za-z])(?:EU|UK|GB|GBR|DE|DEU|FR|FRA|NL|NLD|ES|ESP|IT|ITA|CH|CHE|SE|SWE|FI|FIN|NOR|PL|POL|IE|IRL|AT|AUT|BE|BEL|CZ|CZE|DK|DNK|PT|PRT|GR|GRC)(?:[0-9]|[^A-Za-z]|$)"
   };
@@ -133,11 +171,38 @@ function main(config, profileName) {
     return MANUAL_REGION_TESTS.length;
   };
 
-  const naturalCompare = (a, b) =>
-    String(a).localeCompare(String(b), "zh-CN", {
-      numeric: true,
-      sensitivity: "base"
-    });
+  // Boa 未启用 Intl 时 localeCompare 的 numeric 选项会被忽略；使用纯 JS 自然排序保持跨引擎一致。
+  const naturalCompare = (a, b) => {
+    const ax = String(a).toLowerCase().split(/(\d+)/);
+    const bx = String(b).toLowerCase().split(/(\d+)/);
+    const length = Math.max(ax.length, bx.length);
+
+    for (let i = 0; i < length; i += 1) {
+      const x = ax[i];
+      const y = bx[i];
+
+      if (x === undefined) return -1;
+      if (y === undefined) return 1;
+      if (x === y) continue;
+
+      const xIsNumber = /^\d+$/.test(x);
+      const yIsNumber = /^\d+$/.test(y);
+
+      if (xIsNumber && yIsNumber) {
+        const xn = x.replace(/^0+(?=\d)/, "");
+        const yn = y.replace(/^0+(?=\d)/, "");
+
+        if (xn.length !== yn.length) return xn.length - yn.length;
+        if (xn !== yn) return xn < yn ? -1 : 1;
+        if (x.length !== y.length) return x.length - y.length;
+        continue;
+      }
+
+      return x < y ? -1 : 1;
+    }
+
+    return 0;
+  };
 
   const manualProxyNames = Array.isArray(config.proxies)
     ? config.proxies
@@ -421,7 +486,10 @@ function main(config, profileName) {
       "time.*.com",
       "time.*.gov",
       "time.*.edu.cn",
-      "ntp.*.com"
+      "ntp.*.com",
+      "+.pool.ntp.org",
+      "+.msftconnecttest.com",
+      "+.msftncsi.com"
     ],
 
     // 仅用于 DNS 上游域名 bootstrap；不承担普通业务域名解析。
