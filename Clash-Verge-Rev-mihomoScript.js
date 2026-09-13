@@ -10,6 +10,9 @@ function main(config, profileName) {
     ? Object.keys(providers)
     : [];
   const providerCount = providerNames.length;
+  const originalProxyGroups = Array.isArray(config["proxy-groups"])
+    ? config["proxy-groups"]
+    : [];
 
   if (directProxyCount === 0 && providerCount === 0) {
     return config;
@@ -18,6 +21,99 @@ function main(config, profileName) {
   const TEST_URL = "https://www.gstatic.com/generate_204";
   const INTERVAL = 300;
   const RULE_INTERVAL = 86400;
+
+  // 脚本固定创建的组名。用于冲突检查；不自动重命名节点或原组，避免破坏已有引用。
+  const REGION_GROUPS = [
+    "🇭🇰 香港",
+    "🇲🇴 澳门",
+    "🇹🇼 台湾",
+    "🇰🇷 韩国",
+    "🇸🇬 新加坡",
+    "🇯🇵 日本",
+    "🇺🇸 美国",
+    "🇪🇺 欧洲",
+    "其他地区"
+  ];
+
+  const SCRIPT_GROUP_NAMES = [
+    "全球手动",
+    "默认代理",
+    "自动选择",
+    "国内直连",
+    "国外流量",
+    "漏网之鱼",
+    "ChatGPT",
+    "Claude",
+    "Gemini / NotebookLM",
+    "Google",
+    "GitHub",
+    "Microsoft",
+    "Apple",
+    "Telegram",
+    "X",
+    "YouTube",
+    "Netflix",
+    ...REGION_GROUPS
+  ];
+
+  const SCRIPT_GROUP_NAME_SET = new Set(SCRIPT_GROUP_NAMES);
+  const BUILTIN_TARGETS = new Set(["DIRECT", "REJECT", "PASS", "COMPATIBLE"]);
+
+  const warn = (message) => {
+    if (
+      typeof console !== "undefined" &&
+      console &&
+      typeof console.warn === "function"
+    ) {
+      console.warn(`[SKULL] ${message}`);
+    }
+  };
+
+  const directProxyEntries = Array.isArray(config.proxies)
+    ? config.proxies.map((proxy, index) => ({
+        proxy,
+        index,
+        name: proxy && typeof proxy.name === "string" ? proxy.name : null
+      }))
+    : [];
+
+  const namedDirectProxies = directProxyEntries.filter(
+    ({ name }) => typeof name === "string" && name.trim().length > 0
+  );
+
+  const invalidDirectProxyCount = directProxyEntries.length - namedDirectProxies.length;
+  if (invalidDirectProxyCount > 0) {
+    warn(
+      `检测到 ${invalidDirectProxyCount} 个缺少有效 name 的直接节点；它们仍保留在 config.proxies 中，但不会加入脚本生成的手动/地区引用。`
+    );
+  }
+
+  const directProxyNamesAll = namedDirectProxies.map(({ name }) => name);
+  const directProxyNameSet = new Set(directProxyNamesAll);
+
+  const duplicateDirectProxyNames = directProxyNamesAll.filter(
+    (name, index, names) => names.indexOf(name) !== index
+  );
+
+  if (duplicateDirectProxyNames.length > 0) {
+    throw new Error(
+      `[SKULL] 检测到重复节点名称，未自动删除或重命名：${[
+        ...new Set(duplicateDirectProxyNames)
+      ].join("、")}`
+    );
+  }
+
+  const directNodeGroupCollisions = directProxyNamesAll.filter((name) =>
+    SCRIPT_GROUP_NAME_SET.has(name)
+  );
+
+  if (directNodeGroupCollisions.length > 0) {
+    throw new Error(
+      `[SKULL] 节点名称与脚本代理组重名，无法安全生成配置：${[
+        ...new Set(directNodeGroupCollisions)
+      ].join("、")}`
+    );
+  }
 
   // 仅排除明确的信息/提醒节点，避免误伤“香港01｜不限流量”等正常节点。
   const PSEUDO_PATTERN_BODY =
@@ -98,7 +194,7 @@ function main(config, profileName) {
   };
 
   // 地区优先级同时定义“全球手动”排序和地区组互斥关系。
-  // 若一个名称同时含多个地区标识（如“香港→美国”），只归入最靠前的地区。
+  // 多地区名称继续沿用当前优先级；未确认机场“入口→出口”命名语义前不改变归属规则。
   const REGION_KEYS = ["hk", "mo", "tw", "kr", "sg", "jp", "us", "eu"];
 
   const FILTER = Object.fromEntries(
@@ -142,20 +238,17 @@ function main(config, profileName) {
       sensitivity: "base"
     });
 
-  const manualProxyNames = Array.isArray(config.proxies)
-    ? config.proxies
-        .map((proxy) => proxy && proxy.name)
-        .filter(
-          (name) =>
-            typeof name === "string" &&
-            name.length > 0 &&
-            !PSEUDO_NODE_RE.test(name)
-        )
-        .sort((a, b) => {
-          const rankDiff = manualRegionRank(a) - manualRegionRank(b);
-          return rankDiff !== 0 ? rankDiff : naturalCompare(a, b);
-        })
-    : [];
+  // 普通节点继续按地区 + 数字自然排序；完全相同时显式回退到原订阅序号。
+  const manualProxyNames = namedDirectProxies
+    .filter(({ name }) => !PSEUDO_NODE_RE.test(name))
+    .sort((a, b) => {
+      const rankDiff = manualRegionRank(a.name) - manualRegionRank(b.name);
+      if (rankDiff !== 0) return rankDiff;
+
+      const nameDiff = naturalCompare(a.name, b.name);
+      return nameDiff !== 0 ? nameDiff : a.index - b.index;
+    })
+    .map(({ name }) => name);
 
   // ---------- 3. 工具函数 ----------
   const select = (name, icon, proxies) => ({
@@ -205,18 +298,6 @@ function main(config, profileName) {
   });
 
   // ---------- 4. 策略组 ----------
-  const REGION_GROUPS = [
-    "🇭🇰 香港",
-    "🇲🇴 澳门",
-    "🇹🇼 台湾",
-    "🇰🇷 韩国",
-    "🇸🇬 新加坡",
-    "🇯🇵 日本",
-    "🇺🇸 美国",
-    "🇪🇺 欧洲",
-    "其他地区"
-  ];
-
   const FOREIGN_OPTIONS = [
     "默认代理",
     "自动选择",
@@ -234,7 +315,214 @@ function main(config, profileName) {
     "DIRECT"
   ];
 
-  config["proxy-groups"] = [
+  // ---------- 4.1 原代理组依赖保留 ----------
+  // 仅保存“节点 dialer-proxy / provider 下载出口”真正依赖到的原组，并递归保留其组依赖。
+  const originalGroupsByName = new Map();
+  for (const group of originalProxyGroups) {
+    if (!group || typeof group !== "object") continue;
+    if (typeof group.name !== "string" || group.name.trim().length === 0) continue;
+
+    if (!originalGroupsByName.has(group.name)) {
+      originalGroupsByName.set(group.name, []);
+    }
+    originalGroupsByName.get(group.name).push(group);
+  }
+
+  const requiredOriginalGroupNames = new Set();
+  const rootDependencyRefs = [];
+
+  const addRootRef = (ref, source) => {
+    if (typeof ref !== "string" || ref.length === 0) return;
+    rootDependencyRefs.push({ ref, source });
+  };
+
+  for (const { proxy, name } of namedDirectProxies) {
+    addRootRef(proxy && proxy["dialer-proxy"], `节点「${name}」的 dialer-proxy`);
+  }
+
+  for (const providerName of providerNames) {
+    const provider = providers[providerName];
+    if (!provider || typeof provider !== "object") continue;
+
+    addRootRef(provider.proxy, `provider「${providerName}」的 proxy`);
+    addRootRef(provider["dialer-proxy"], `provider「${providerName}」的 dialer-proxy`);
+
+    if (provider["health-check"] && typeof provider["health-check"] === "object") {
+      addRootRef(
+        provider["health-check"].proxy,
+        `provider「${providerName}」health-check 的 proxy`
+      );
+    }
+  }
+
+  const requireOriginalGroup = (name, source) => {
+    const candidates = originalGroupsByName.get(name);
+    if (!candidates) return false;
+
+    if (candidates.length !== 1) {
+      throw new Error(
+        `[SKULL] 原订阅存在重名代理组「${name}」，且被${source}引用，无法判断应保留哪一个。`
+      );
+    }
+
+    if (directProxyNameSet.has(name)) {
+      throw new Error(
+        `[SKULL] 原代理组「${name}」与直接节点同名，且被${source}引用，无法安全判断引用目标。`
+      );
+    }
+
+    if (SCRIPT_GROUP_NAME_SET.has(name)) {
+      throw new Error(
+        `[SKULL] 原代理组「${name}」被${source}依赖，但该名称会被脚本创建的新组占用；未自动替换或重命名。`
+      );
+    }
+
+    requiredOriginalGroupNames.add(name);
+    return true;
+  };
+
+  for (const { ref, source } of rootDependencyRefs) {
+    if (requireOriginalGroup(ref, source)) continue;
+
+    if (SCRIPT_GROUP_NAME_SET.has(ref)) {
+      throw new Error(
+        `[SKULL] ${source}引用「${ref}」，该名称属于脚本固定代理组，但原订阅中没有可确认的同名依赖组；为避免语义被静默改变，已停止生成。`
+      );
+    }
+
+    if (!directProxyNameSet.has(ref) && !BUILTIN_TARGETS.has(ref)) {
+      // 可能是动态 provider 内部节点名，脚本阶段无法完整枚举；只提示，不武断判定为悬空。
+      warn(`${source}引用「${ref}」，当前静态配置中无法确认目标；若它来自动态 provider，可忽略此提示。`);
+    }
+  }
+
+  const dependencyEdges = new Map();
+  const processedDependencyGroups = new Set();
+  const dependencyQueue = [...requiredOriginalGroupNames];
+
+  while (dependencyQueue.length > 0) {
+    const groupName = dependencyQueue.shift();
+    if (processedDependencyGroups.has(groupName)) continue;
+    processedDependencyGroups.add(groupName);
+
+    const candidates = originalGroupsByName.get(groupName) || [];
+    if (candidates.length !== 1) {
+      throw new Error(
+        `[SKULL] 无法唯一解析需要保留的原代理组「${groupName}」。`
+      );
+    }
+
+    const group = candidates[0];
+    const groupEdges = new Set();
+
+    const groupProxyRefs = Array.isArray(group.proxies) ? group.proxies : [];
+    for (const ref of groupProxyRefs) {
+      if (typeof ref !== "string" || ref.length === 0) continue;
+
+      if (originalGroupsByName.has(ref)) {
+        const source = `原代理组「${groupName}」`;
+        requireOriginalGroup(ref, source);
+        groupEdges.add(ref);
+        if (!processedDependencyGroups.has(ref)) dependencyQueue.push(ref);
+        continue;
+      }
+
+      if (
+        !directProxyNameSet.has(ref) &&
+        !BUILTIN_TARGETS.has(ref) &&
+        !SCRIPT_GROUP_NAME_SET.has(ref)
+      ) {
+        warn(
+          `原代理组「${groupName}」引用「${ref}」，静态配置中无法确认目标；它可能来自动态 provider。`
+        );
+      }
+    }
+
+    const groupDialerProxy = group["dialer-proxy"];
+    if (typeof groupDialerProxy === "string" && groupDialerProxy.length > 0) {
+      if (originalGroupsByName.has(groupDialerProxy)) {
+        requireOriginalGroup(groupDialerProxy, `原代理组「${groupName}」的 dialer-proxy`);
+        groupEdges.add(groupDialerProxy);
+        if (!processedDependencyGroups.has(groupDialerProxy)) {
+          dependencyQueue.push(groupDialerProxy);
+        }
+      } else if (
+        SCRIPT_GROUP_NAME_SET.has(groupDialerProxy) &&
+        !directProxyNameSet.has(groupDialerProxy)
+      ) {
+        throw new Error(
+          `[SKULL] 原代理组「${groupName}」的 dialer-proxy 引用脚本固定组「${groupDialerProxy}」，无法确认原始语义。`
+        );
+      }
+    }
+
+    const usedProviders = Array.isArray(group.use) ? group.use : [];
+    for (const providerName of usedProviders) {
+      if (typeof providerName !== "string" || providerName.length === 0) continue;
+      if (!providerNames.includes(providerName)) {
+        throw new Error(
+          `[SKULL] 原代理组「${groupName}」依赖缺失的 proxy-provider「${providerName}」。`
+        );
+      }
+    }
+
+    dependencyEdges.set(groupName, groupEdges);
+  }
+
+  // 检查仅限“需要保留”的原组依赖链，避免把与本脚本无关的原组问题扩大化。
+  const visitState = new Map();
+  const visitStack = [];
+
+  const visitGroup = (groupName) => {
+    const state = visitState.get(groupName) || 0;
+    if (state === 2) return;
+    if (state === 1) {
+      const cycleStart = visitStack.indexOf(groupName);
+      const cycle = [...visitStack.slice(cycleStart), groupName];
+      throw new Error(`[SKULL] 检测到原代理组循环依赖：${cycle.join(" -> ")}`);
+    }
+
+    visitState.set(groupName, 1);
+    visitStack.push(groupName);
+
+    const deps = dependencyEdges.get(groupName) || new Set();
+    for (const dep of deps) visitGroup(dep);
+
+    visitStack.pop();
+    visitState.set(groupName, 2);
+  };
+
+  for (const groupName of requiredOriginalGroupNames) {
+    visitGroup(groupName);
+  }
+
+  const preservedOriginalGroups = originalProxyGroups.filter(
+    (group) =>
+      group &&
+      typeof group === "object" &&
+      typeof group.name === "string" &&
+      requiredOriginalGroupNames.has(group.name)
+  );
+
+  const manualReferences = manualProxyNames.length > 0
+    ? [...manualProxyNames, "DIRECT"]
+    : providerNames.length === 0
+      ? ["REJECT"]
+      : [];
+
+  const duplicateManualReferences = manualReferences.filter(
+    (name, index, names) => names.indexOf(name) !== index
+  );
+
+  if (duplicateManualReferences.length > 0) {
+    throw new Error(
+      `[SKULL] 「全球手动」将产生重复引用：${[
+        ...new Set(duplicateManualReferences)
+      ].join("、")}`
+    );
+  }
+
+  const generatedProxyGroups = [
     // 1. 基础策略
     {
       name: "全球手动",
@@ -242,7 +530,7 @@ function main(config, profileName) {
       icon: ICON.manual,
       // 纯 provider 场景不显式插入 DIRECT，避免首次加载时 DIRECT 成为首选。
       ...(manualProxyNames.length > 0
-        ? { proxies: [...manualProxyNames, "DIRECT"] }
+        ? { proxies: manualReferences }
         : providerNames.length === 0
           ? { proxies: ["REJECT"] }
           : {}),
@@ -330,6 +618,11 @@ function main(config, profileName) {
       "expected-status": 204,
       "empty-fallback": "REJECT"
     }
+  ];
+
+  config["proxy-groups"] = [
+    ...generatedProxyGroups,
+    ...preservedOriginalGroups
   ];
 
   // ---------- 5. Rule Providers ----------
