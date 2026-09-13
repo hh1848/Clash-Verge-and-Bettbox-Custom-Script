@@ -19,7 +19,7 @@ function main(config, profileName) {
   const RULE_INTERVAL = 86400;
 
   // 排除机场的流量信息、到期提醒等伪节点
-  const EXCLUDE = "(?i)(到期|过期|剩余|流量|套餐|官网|网址|订阅|重置|Expire|Expired|Traffic|Remaining|Website)";
+  const EXCLUDE = "(?i)(到期|过期|剩余|流量|套餐|官网|网址|订阅|重置|公告|通知|提示|教程|使用说明|使用须知|客服|联系|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire|Expired|Traffic|Remaining|Website)";
 
   // ---------- 1. 图标 ----------
   const ICON = {
@@ -87,12 +87,12 @@ function main(config, profileName) {
     kr: "(?i)(🇰🇷|韩国|韓國|Korea|Seoul|\\bKR\\b|\\bKOR\\b)",
     sg: "(?i)(🇸🇬|新加坡|狮城|獅城|Singapore|\\bSG(P)?\\b)",
     jp: "(?i)(🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|\\bJP(N)?\\b)",
-    us: "(?i)(🇺🇸|美国|美國|United ?States|America|Los ?Angeles|San ?Jose|Seattle|New ?York|Phoenix|凤凰城|\\bPHX\\b|\\bUS(A)?\\b)",
+    us: "(?i)(🇺🇸|美国|美國|美[.·|｜_\\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake(?: ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|\\bLAX\\b|\\bSJC\\b|\\bSEA\\b|\\bNYC\\b|\\bPHX\\b|\\bSLC\\b|\\bSFO\\b|\\bDFW\\b|\\bORD\\b|\\bLAS\\b|\\bIAD\\b|\\bUS(A)?\\b)",
     eu: "(?i)(🇪🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|\\bEU\\b|\\bUK\\b|\\bGB(R)?\\b|\\bDE(U)?\\b|\\bFR(A)?\\b|\\bNL(D)?\\b)"
   };
 
   const OTHER_EXCLUDE =
-    "(?i)(到期|过期|剩余|流量|套餐|官网|网址|订阅|重置|Expire|Expired|Traffic|Remaining|Website|🇭🇰|香港|Hong ?Kong|\\bHK(G)?\\b|🇲🇴|澳门|澳門|Macao|Macau|\\bMO\\b|🇹🇼|台湾|台灣|Taiwan|Taipei|\\bTW(N)?\\b|🇰🇷|韩国|韓國|Korea|Seoul|\\bKR\\b|\\bKOR\\b|🇸🇬|新加坡|狮城|獅城|Singapore|\\bSG(P)?\\b|🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|\\bJP(N)?\\b|🇺🇸|美国|美國|United ?States|America|Los ?Angeles|San ?Jose|Seattle|New ?York|Phoenix|凤凰城|\\bPHX\\b|\\bUS(A)?\\b|🇪🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|\\bEU\\b|\\bUK\\b|\\bGB(R)?\\b|\\bDE(U)?\\b|\\bFR(A)?\\b|\\bNL(D)?\\b)";
+    "(?i)(到期|过期|剩余|流量|套餐|官网|网址|订阅|重置|公告|通知|提示|教程|使用说明|使用须知|客服|联系|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire|Expired|Traffic|Remaining|Website|🇭🇰|香港|Hong ?Kong|\\bHK(G)?\\b|🇲🇴|澳门|澳門|Macao|Macau|\\bMO\\b|🇹🇼|台湾|台灣|Taiwan|Taipei|\\bTW(N)?\\b|🇰🇷|韩国|韓國|Korea|Seoul|\\bKR\\b|\\bKOR\\b|🇸🇬|新加坡|狮城|獅城|Singapore|\\bSG(P)?\\b|🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|\\bJP(N)?\\b|🇺🇸|美国|美國|美[.·|｜_\\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake(?: ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|\\bLAX\\b|\\bSJC\\b|\\bSEA\\b|\\bNYC\\b|\\bPHX\\b|\\bSLC\\b|\\bSFO\\b|\\bDFW\\b|\\bORD\\b|\\bLAS\\b|\\bIAD\\b|\\bUS(A)?\\b|🇪🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|\\bEU\\b|\\bUK\\b|\\bGB(R)?\\b|\\bDE(U)?\\b|\\bFR(A)?\\b|\\bNL(D)?\\b)";
 
   // 全球手动节点固定排序：香港 -> 澳门 -> 台湾 -> 韩国 -> 新加坡 -> 日本 -> 美国 -> 欧洲 -> 其他地区。
   const MANUAL_REGION_TESTS = [
@@ -102,12 +102,12 @@ function main(config, profileName) {
     /(?:🇰🇷|韩国|韓國|Korea|Seoul|\bKR\b|\bKOR\b)/i,
     /(?:🇸🇬|新加坡|狮城|獅城|Singapore|\bSG(?:P)?\b)/i,
     /(?:🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|\bJP(?:N)?\b)/i,
-    /(?:🇺🇸|美国|美國|United ?States|America|Los ?Angeles|San ?Jose|Seattle|New ?York|Phoenix|凤凰城|\bPHX\b|\bUS(?:A)?\b)/i,
+    /(?:🇺🇸|美国|美國|美[.·|｜_\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake(?: ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|\bLAX\b|\bSJC\b|\bSEA\b|\bNYC\b|\bPHX\b|\bSLC\b|\bSFO\b|\bDFW\b|\bORD\b|\bLAS\b|\bIAD\b|\bUS(?:A)?\b)/i,
     /(?:🇪🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|\bEU\b|\bUK\b|\bGB(?:R)?\b|\bDE(?:U)?\b|\bFR(?:A)?\b|\bNL(?:D)?\b)/i
   ];
 
   const PSEUDO_NODE_RE =
-    /(?:到期|过期|剩余|流量|套餐|官网|网址|订阅|重置|Expire|Expired|Traffic|Remaining|Website)/i;
+    /(?:到期|过期|剩余|流量|套餐|官网|网址|订阅|重置|公告|通知|提示|教程|使用说明|使用须知|客服|联系|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire|Expired|Traffic|Remaining|Website)/i;
 
   const manualRegionRank = (name) => {
     for (let i = 0; i < MANUAL_REGION_TESTS.length; i += 1) {
