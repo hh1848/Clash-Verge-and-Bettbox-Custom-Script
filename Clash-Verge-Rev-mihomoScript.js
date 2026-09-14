@@ -1,5 +1,5 @@
 // Clash Verge Rev 全局扩展脚本
-// Version: 2026.09.13
+// Version: 2026.09.14
 // 目标：国内直连、国外代理；ChatGPT / Claude / Gemini & NotebookLM 独立；常用国际服务独立；地区自动测速。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
@@ -21,7 +21,7 @@ function main(config, profileName) {
   const RULE_INTERVAL = 86400;
 
   // provider 节点的 url-test 依赖 provider 自身 health-check 数据。
-  // 仅补齐缺失项并强制启用，不覆盖机场已有的 url / interval / timeout 等配置。
+  // 仅补齐缺失项并强制启用；只有脚本自行补入 generate_204 时才默认 expected-status=204。
   const ensureProviderHealthCheck = (provider) => {
     if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
       return;
@@ -34,10 +34,13 @@ function main(config, profileName) {
         ? provider["health-check"]
         : {};
 
-    provider["health-check"] = {
+    const hasHealthCheckUrl =
+      typeof current.url === "string" && current.url.length > 0;
+
+    const nextHealthCheck = {
       ...current,
       enable: true,
-      url: current.url || TEST_URL,
+      url: hasHealthCheckUrl ? current.url : TEST_URL,
       interval:
         typeof current.interval === "number" && current.interval > 0
           ? current.interval
@@ -45,12 +48,14 @@ function main(config, profileName) {
       lazy:
         typeof current.lazy === "boolean"
           ? current.lazy
-          : true,
-      "expected-status":
-        current["expected-status"] !== undefined
-          ? current["expected-status"]
-          : 204
+          : true
     };
+
+    if (!hasHealthCheckUrl && current["expected-status"] === undefined) {
+      nextHealthCheck["expected-status"] = 204;
+    }
+
+    provider["health-check"] = nextHealthCheck;
   };
 
   for (const name of providerNames) {
@@ -232,6 +237,7 @@ function main(config, profileName) {
     type: "url-test",
     icon,
     "include-all": true,
+    "exclude-type": "direct",
     filter,
     "exclude-filter": excludeFilter,
     url: TEST_URL,
@@ -296,6 +302,12 @@ function main(config, profileName) {
     "DIRECT"
   ];
 
+  // AI 组绝对强制代理：只允许引用不会通向 DIRECT 的自动/地区组。
+  const AI_OPTIONS = [
+    "自动选择",
+    ...REGION_GROUPS
+  ];
+
   config["proxy-groups"] = [
     // 1. 基础策略
     {
@@ -329,6 +341,7 @@ function main(config, profileName) {
       type: "url-test",
       icon: ICON.auto,
       "include-all": true,
+      "exclude-type": "direct",
       "exclude-filter": EXCLUDE,
       url: TEST_URL,
       interval: INTERVAL,
@@ -348,9 +361,9 @@ function main(config, profileName) {
     ]),
 
     // 2. AI
-    select("ChatGPT", ICON.chatgpt, SERVICE_OPTIONS),
-    select("Claude", ICON.claude, SERVICE_OPTIONS),
-    select("Gemini / NotebookLM", ICON.gemini, SERVICE_OPTIONS),
+    select("ChatGPT", ICON.chatgpt, AI_OPTIONS),
+    select("Claude", ICON.claude, AI_OPTIONS),
+    select("Gemini / NotebookLM", ICON.gemini, AI_OPTIONS),
 
     // 3. 常用国际服务
     select("Google", ICON.google, SERVICE_OPTIONS),
@@ -377,6 +390,7 @@ function main(config, profileName) {
       type: "url-test",
       icon: ICON.other,
       "include-all": true,
+      "exclude-type": "direct",
       filter: "(?i)^.*$",
       "exclude-filter": OTHER_EXCLUDE,
       url: TEST_URL,
@@ -468,7 +482,17 @@ function main(config, profileName) {
   ];
 
   // ---------- 7. DNS ----------
-  // DNS 关键行为由脚本明确控制；国内域名使用国内 DNS 直连，其余域名使用境外 DNS 并经默认代理发送。
+  // DNS 与业务策略保持一致：国内/AppleCN 直连解析；服务域名的 DoH 请求跟随对应服务组。
+  const DIRECT_DNS = [
+    "https://dns.alidns.com/dns-query#DIRECT",
+    "https://doh.pub/dns-query#DIRECT"
+  ];
+
+  const serviceDns = (group) => [
+    `https://1.1.1.1/dns-query#${group}`,
+    `https://8.8.8.8/dns-query#${group}`
+  ];
+
   config.dns = {
     enable: true,
     ipv6: false,
@@ -504,16 +528,34 @@ function main(config, profileName) {
       "https://8.8.8.8/dns-query#默认代理"
     ],
 
-    // 国内域名：仅使用国内 DoH，并明确直连，保持国内 CDN / GeoDNS 结果。
+    // Policy 顺序与业务规则顺序保持一致，避免重叠规则的 DNS 出口与业务出口不一致。
     "nameserver-policy": {
-      "rule-set:SKULL_China": [
-        "https://dns.alidns.com/dns-query#DIRECT",
-        "https://doh.pub/dns-query#DIRECT"
-      ],
-      "rule-set:SKULL_Lan": [
-        "https://dns.alidns.com/dns-query#DIRECT",
-        "https://doh.pub/dns-query#DIRECT"
-      ]
+      "rule-set:SKULL_Lan": DIRECT_DNS,
+
+      // Gemini / NotebookLM 的显式域名必须早于通用 Google。
+      "+.notebooklm.google": serviceDns("Gemini / NotebookLM"),
+      "+.notebooklm.google.com": serviceDns("Gemini / NotebookLM"),
+      "+.aistudio.google.com": serviceDns("Gemini / NotebookLM"),
+      "+.ai.google.dev": serviceDns("Gemini / NotebookLM"),
+      "+.generativelanguage.googleapis.com": serviceDns("Gemini / NotebookLM"),
+
+      "rule-set:SKULL_OpenAI": serviceDns("ChatGPT"),
+      "rule-set:SKULL_Claude": serviceDns("Claude"),
+      "rule-set:SKULL_Gemini": serviceDns("Gemini / NotebookLM"),
+
+      // 中国区 Apple 与中国大陆域名保持直连 DNS。
+      "rule-set:SKULL_AppleCN": DIRECT_DNS,
+      "rule-set:SKULL_China": DIRECT_DNS,
+
+      // 国际服务 DNS 跟随各自服务组。
+      "rule-set:SKULL_YouTube": serviceDns("YouTube"),
+      "rule-set:SKULL_Google": serviceDns("Google"),
+      "rule-set:SKULL_GitHub": serviceDns("GitHub"),
+      "rule-set:SKULL_Microsoft": serviceDns("Microsoft"),
+      "rule-set:SKULL_Apple": serviceDns("Apple"),
+      "rule-set:SKULL_Telegram": serviceDns("Telegram"),
+      "rule-set:SKULL_X": serviceDns("X"),
+      "rule-set:SKULL_Netflix": serviceDns("Netflix")
     },
 
     // 代理服务器域名必须独立直连解析，避免 nameserver -> 默认代理 -> 节点域名解析形成循环依赖。
