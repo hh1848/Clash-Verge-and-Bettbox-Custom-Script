@@ -1,6 +1,6 @@
 // Clash Verge Rev 全局扩展脚本
-// Version: 2026.09.13
-// 目标：国内直连、国外代理；ChatGPT / Claude / Gemini & NotebookLM 独立；常用国际服务独立；地区自动测速。
+// Version: 2026.09.14
+// 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
 function main(config, profileName) {
@@ -65,9 +65,6 @@ function main(config, profileName) {
 
   // ---------- 1. 图标 ----------
   const ICON = {
-    default:
-      "https://fastly.jsdelivr.net/gh/0xWans/Qure@master/IconSet/Color/Rocket.png",
-
     foreign:
       "https://fastly.jsdelivr.net/gh/0xWans/Qure@master/IconSet/Color/Global.png",
 
@@ -134,7 +131,7 @@ function main(config, profileName) {
 
   // 地区优先级同时定义“全球手动”排序和地区组互斥关系。
   // 若一个名称同时含多个地区标识（如“香港→美国”），只归入最靠前的地区。
-  const REGION_KEYS = ["hk", "mo", "tw", "kr", "sg", "jp", "us", "eu"];
+  const REGION_KEYS = ["hk", "mo", "tw", "sg", "kr", "jp", "us", "eu"];
 
   const FILTER = Object.fromEntries(
     REGION_KEYS.map((key) => [key, `(?i)(${REGION_PATTERN_BODY[key]})`])
@@ -227,10 +224,12 @@ function main(config, profileName) {
     proxies
   });
 
-  const region = (name, icon, filter, excludeFilter = EXCLUDE) => ({
+  const regionAuto = (name, icon, filter, excludeFilter = EXCLUDE) => ({
     name,
     type: "url-test",
     icon,
+    // 底层地区测速组仅供地区聚合组调用，不在 Clash Verge Rev 主界面显示。
+    hidden: true,
     "include-all": true,
     filter,
     "exclude-filter": excludeFilter,
@@ -239,6 +238,24 @@ function main(config, profileName) {
     tolerance: 80,
     lazy: true,
     "expected-status": 204,
+    "empty-fallback": "REJECT"
+  });
+
+  // 地区聚合组：首项为该地区自动测速，同时保留该地区全部节点供手动切换。
+  const regionAggregate = (
+    name,
+    autoName,
+    icon,
+    filter,
+    excludeFilter = EXCLUDE
+  ) => ({
+    name,
+    type: "select",
+    icon,
+    proxies: [autoName],
+    "include-all": true,
+    filter,
+    "exclude-filter": excludeFilter,
     "empty-fallback": "REJECT"
   });
 
@@ -268,32 +285,37 @@ function main(config, profileName) {
 
   // ---------- 4. 策略组 ----------
   const REGION_GROUPS = [
-    "🇭🇰 香港",
-    "🇲🇴 澳门",
-    "🇹🇼 台湾",
-    "🇰🇷 韩国",
-    "🇸🇬 新加坡",
-    "🇯🇵 日本",
-    "🇺🇸 美国",
-    "🇪🇺 欧洲",
+    "香港聚合",
+    "澳门聚合",
+    "台湾聚合",
+    "新加坡聚合",
+    "韩国聚合",
+    "日本聚合",
+    "美国聚合",
+    "欧洲聚合",
     "其他地区"
   ];
 
-  const FOREIGN_OPTIONS = [
-    "默认代理",
+  // AI 不提供 DIRECT，也不引用任何可切换到 DIRECT 的上级组，避免间接直连。
+  const AI_OPTIONS = [
+    "自动选择",
+    "全球手动",
+    ...REGION_GROUPS
+  ];
+
+  // 普通国际服务允许用户显式选择 DIRECT。
+  const SERVICE_OPTIONS = [
     "自动选择",
     "全球手动",
     ...REGION_GROUPS,
     "DIRECT"
   ];
 
-  const SERVICE_OPTIONS = [
-    "国外流量",
-    "默认代理",
+  // “国外流量”只负责一般国外流量，不提供 DIRECT。
+  const FOREIGN_OPTIONS = [
     "自动选择",
     "全球手动",
-    ...REGION_GROUPS,
-    "DIRECT"
+    ...REGION_GROUPS
   ];
 
   config["proxy-groups"] = [
@@ -302,9 +324,10 @@ function main(config, profileName) {
       name: "全球手动",
       type: "select",
       icon: ICON.manual,
-      // 纯 provider 场景不显式插入 DIRECT，避免首次加载时 DIRECT 成为首选。
+      // 直接节点按 香港→澳门→台湾→新加坡→韩国→日本→美国→欧洲→其他 排序。
+      // 不加入 DIRECT，确保被 AI 组引用时不会出现间接直连。
       ...(manualProxyNames.length > 0
-        ? { proxies: [...manualProxyNames, "DIRECT"] }
+        ? { proxies: [...manualProxyNames] }
         : providerNames.length === 0
           ? { proxies: ["REJECT"] }
           : {}),
@@ -316,13 +339,6 @@ function main(config, profileName) {
         : {}),
       "empty-fallback": "REJECT"
     },
-
-    select("默认代理", ICON.default, [
-      "自动选择",
-      "全球手动",
-      ...REGION_GROUPS,
-      "DIRECT"
-    ]),
 
     {
       name: "自动选择",
@@ -340,17 +356,18 @@ function main(config, profileName) {
 
     select("国外流量", ICON.foreign, FOREIGN_OPTIONS),
 
+    // 未被任何明确规则命中的流量默认交给“国外流量”，但保留 DIRECT 手动兜底。
     select("漏网之鱼", ICON.final, [
       "国外流量",
-      "默认代理",
+      "自动选择",
       "全球手动",
       "DIRECT"
     ]),
 
-    // 2. AI
-    select("ChatGPT", ICON.chatgpt, SERVICE_OPTIONS),
-    select("Claude", ICON.claude, SERVICE_OPTIONS),
-    select("Gemini / NotebookLM", ICON.gemini, SERVICE_OPTIONS),
+    // 2. AI：强制代理，无 DIRECT
+    select("ChatGPT", ICON.chatgpt, AI_OPTIONS),
+    select("Claude", ICON.claude, AI_OPTIONS),
+    select("Gemini / NotebookLM", ICON.gemini, AI_OPTIONS),
 
     // 3. 常用国际服务
     select("Google", ICON.google, SERVICE_OPTIONS),
@@ -362,36 +379,34 @@ function main(config, profileName) {
     select("YouTube", ICON.youtube, SERVICE_OPTIONS),
     select("Netflix", ICON.netflix, SERVICE_OPTIONS),
 
-    // 4. 地区节点
-    region("🇭🇰 香港", ICON.hk, FILTER.hk, REGION_EXCLUDE.hk),
-    region("🇲🇴 澳门", ICON.mo, FILTER.mo, REGION_EXCLUDE.mo),
-    region("🇹🇼 台湾", ICON.tw, FILTER.tw, REGION_EXCLUDE.tw),
-    region("🇰🇷 韩国", ICON.kr, FILTER.kr, REGION_EXCLUDE.kr),
-    region("🇸🇬 新加坡", ICON.sg, FILTER.sg, REGION_EXCLUDE.sg),
-    region("🇯🇵 日本", ICON.jp, FILTER.jp, REGION_EXCLUDE.jp),
-    region("🇺🇸 美国", ICON.us, FILTER.us, REGION_EXCLUDE.us),
-    region("🇪🇺 欧洲", ICON.eu, FILTER.eu, REGION_EXCLUDE.eu),
+    // 4. 地区聚合：聚合组 = 地区自动测速 + 该地区全部节点
+    regionAggregate("香港聚合", "香港自动", ICON.hk, FILTER.hk, REGION_EXCLUDE.hk),
+    regionAggregate("澳门聚合", "澳门自动", ICON.mo, FILTER.mo, REGION_EXCLUDE.mo),
+    regionAggregate("台湾聚合", "台湾自动", ICON.tw, FILTER.tw, REGION_EXCLUDE.tw),
+    regionAggregate("新加坡聚合", "新加坡自动", ICON.sg, FILTER.sg, REGION_EXCLUDE.sg),
+    regionAggregate("韩国聚合", "韩国自动", ICON.kr, FILTER.kr, REGION_EXCLUDE.kr),
+    regionAggregate("日本聚合", "日本自动", ICON.jp, FILTER.jp, REGION_EXCLUDE.jp),
+    regionAggregate("美国聚合", "美国自动", ICON.us, FILTER.us, REGION_EXCLUDE.us),
+    regionAggregate("欧洲聚合", "欧洲自动", ICON.eu, FILTER.eu, REGION_EXCLUDE.eu),
+    regionAggregate("其他地区", "其他自动", ICON.other, "(?i)^.*$", OTHER_EXCLUDE),
 
-    {
-      name: "其他地区",
-      type: "url-test",
-      icon: ICON.other,
-      "include-all": true,
-      filter: "(?i)^.*$",
-      "exclude-filter": OTHER_EXCLUDE,
-      url: TEST_URL,
-      interval: INTERVAL,
-      tolerance: 80,
-      lazy: true,
-      "expected-status": 204,
-      "empty-fallback": "REJECT"
-    }
+    // 5. 地区自动测速子组
+    regionAuto("香港自动", ICON.hk, FILTER.hk, REGION_EXCLUDE.hk),
+    regionAuto("澳门自动", ICON.mo, FILTER.mo, REGION_EXCLUDE.mo),
+    regionAuto("台湾自动", ICON.tw, FILTER.tw, REGION_EXCLUDE.tw),
+    regionAuto("新加坡自动", ICON.sg, FILTER.sg, REGION_EXCLUDE.sg),
+    regionAuto("韩国自动", ICON.kr, FILTER.kr, REGION_EXCLUDE.kr),
+    regionAuto("日本自动", ICON.jp, FILTER.jp, REGION_EXCLUDE.jp),
+    regionAuto("美国自动", ICON.us, FILTER.us, REGION_EXCLUDE.us),
+    regionAuto("欧洲自动", ICON.eu, FILTER.eu, REGION_EXCLUDE.eu),
+    regionAuto("其他自动", ICON.other, "(?i)^.*$", OTHER_EXCLUDE)
   ];
 
   // ---------- 5. Rule Providers ----------
   const customRuleProviders = {
     SKULL_Lan: domainProvider("private.mrs"),
     SKULL_China: domainProvider("cn.mrs"),
+    SKULL_Foreign: domainProvider("geolocation-!cn.mrs"),
 
     SKULL_OpenAI: domainProvider("openai.mrs"),
     SKULL_Claude: domainProvider("anthropic.mrs"),
@@ -421,7 +436,8 @@ function main(config, profileName) {
   };
 
   // ---------- 6. 分流规则 ----------
-  // NotebookLM / Gemini 必须早于通用 Google
+  // 优先级：LAN → AI → 特殊国际服务 → 中国域名 → 一般国外域名 → IP → MATCH
+  // NotebookLM / Gemini 必须早于通用 Google。
   config.rules = [
     // LAN
     "RULE-SET,SKULL_Lan,DIRECT",
@@ -437,13 +453,10 @@ function main(config, profileName) {
     "RULE-SET,SKULL_Claude,Claude",
     "RULE-SET,SKULL_Gemini,Gemini / NotebookLM",
 
-    // 中国区 Apple 直连
+    // 中国区 Apple 必须在通用 Apple 前直连
     "RULE-SET,SKULL_AppleCN,DIRECT",
 
-    // 中国大陆域名
-    "RULE-SET,SKULL_China,DIRECT",
-
-    // 国际服务
+    // 常用国际服务
     "RULE-SET,SKULL_YouTube,YouTube",
     "RULE-SET,SKULL_Google,Google",
     "RULE-SET,SKULL_GitHub,GitHub",
@@ -452,6 +465,12 @@ function main(config, profileName) {
     "RULE-SET,SKULL_Telegram,Telegram",
     "RULE-SET,SKULL_X,X",
     "RULE-SET,SKULL_Netflix,Netflix",
+
+    // 中国大陆域名优先直连
+    "RULE-SET,SKULL_China,DIRECT",
+
+    // 除上述特殊服务外，其余明确的国外域名统一交给“国外流量”
+    "RULE-SET,SKULL_Foreign,国外流量",
 
     // IP 规则
     "RULE-SET,SKULL_LanIP,DIRECT,no-resolve",
@@ -463,12 +482,12 @@ function main(config, profileName) {
     // 中国 IP 作为未知域名的最终国内兜底：允许触发 DNS 解析
     "RULE-SET,SKULL_ChinaIP,DIRECT",
 
-    // 最终
+    // 无法明确判断的流量
     "MATCH,漏网之鱼"
   ];
 
   // ---------- 7. DNS ----------
-  // DNS 关键行为由脚本明确控制；国内域名使用国内 DNS 直连，其余域名使用境外 DNS 并经默认代理发送。
+  // DNS 关键行为由脚本明确控制；国内域名使用国内 DNS 直连，其余域名使用境外 DNS 并经“国外流量”发送。
   config.dns = {
     enable: true,
     ipv6: false,
@@ -498,10 +517,10 @@ function main(config, profileName) {
       "119.29.29.29"
     ],
 
-    // 默认 / 境外域名：使用境外 DoH，并明确从默认代理出口发送，避免本地 DNS 暴露查询。
+    // 默认 / 境外域名：使用境外 DoH，并明确从“国外流量”出口发送，避免本地 DNS 暴露查询。
     nameserver: [
-      "https://1.1.1.1/dns-query#默认代理",
-      "https://8.8.8.8/dns-query#默认代理"
+      "https://1.1.1.1/dns-query#国外流量",
+      "https://8.8.8.8/dns-query#国外流量"
     ],
 
     // 国内域名：仅使用国内 DoH，并明确直连，保持国内 CDN / GeoDNS 结果。
@@ -516,7 +535,7 @@ function main(config, profileName) {
       ]
     },
 
-    // 代理服务器域名必须独立直连解析，避免 nameserver -> 默认代理 -> 节点域名解析形成循环依赖。
+    // 代理服务器域名必须独立直连解析，避免 nameserver -> 国外流量 -> 节点域名解析形成循环依赖。
     "proxy-server-nameserver": [
       "https://dns.alidns.com/dns-query#DIRECT",
       "https://doh.pub/dns-query#DIRECT"
