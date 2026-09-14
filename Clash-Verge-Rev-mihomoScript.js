@@ -1,9 +1,12 @@
 // Clash Verge Rev 全局扩展脚本
-// Version: 2026.09.14
+// Version: 2026.09.14-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
 function main(config, profileName) {
+  const oldGroups = Array.isArray(config["proxy-groups"])
+    ? config["proxy-groups"]
+    : [];
   // ---------- 0. 基础检查：保留机场 proxies / proxy-providers ----------
   const directProxyCount = Array.isArray(config.proxies) ? config.proxies.length : 0;
   const providers = config["proxy-providers"];
@@ -19,6 +22,10 @@ function main(config, profileName) {
   const TEST_URL = "https://www.gstatic.com/generate_204";
   const INTERVAL = 600;
   const RULE_INTERVAL = 86400;
+  const BYPASS_TYPES = ["direct", "pass", "compatible"];
+  const GROUP_EXCLUDE_TYPES = "Direct|Pass|Compatible";
+  const isProxyCandidate = (proxy) =>
+    proxy && !BYPASS_TYPES.includes(String(proxy.type || "").toLowerCase());
 
   // provider 节点的 url-test 依赖 provider 自身 health-check 数据。
   // 仅补齐缺失项并强制启用，不覆盖机场已有的 url / interval / timeout 等配置。
@@ -45,17 +52,22 @@ function main(config, profileName) {
       lazy:
         typeof current.lazy === "boolean"
           ? current.lazy
-          : true,
-      "expected-status":
-        current["expected-status"] !== undefined
-          ? current["expected-status"]
-          : 204
+          : true
     };
+
+    // 仅默认 generate_204 配套补 204；自定义 URL 保持原有状态码语义。
+    if (current["expected-status"] == null) {
+      delete provider["health-check"]["expected-status"];
+      if (provider["health-check"].url === TEST_URL) {
+        provider["health-check"]["expected-status"] = 204;
+      }
+    }
   };
 
   for (const name of providerNames) {
     ensureProviderHealthCheck(providers[name]);
   }
+  // provider 内的直连出站可能是旧组依赖，因此保留原定义；在新组的 exclude-type 中过滤。
 
   // 仅排除明确的信息/提醒节点，避免误伤“香港01｜不限流量”等正常节点。
   const PSEUDO_PATTERN_BODY =
@@ -203,6 +215,7 @@ function main(config, profileName) {
 
   const manualProxyNames = Array.isArray(config.proxies)
     ? config.proxies
+        .filter(isProxyCandidate)
         .map((proxy) => proxy && proxy.name)
         .filter(
           (name) =>
@@ -231,6 +244,7 @@ function main(config, profileName) {
     // 底层地区测速组仅供地区聚合组调用，不在 Clash Verge Rev 主界面显示。
     hidden: true,
     "include-all": true,
+    "exclude-type": GROUP_EXCLUDE_TYPES,
     filter,
     "exclude-filter": excludeFilter,
     url: TEST_URL,
@@ -254,6 +268,7 @@ function main(config, profileName) {
     icon,
     proxies: [autoName],
     "include-all": true,
+    "exclude-type": GROUP_EXCLUDE_TYPES,
     filter,
     "exclude-filter": excludeFilter,
     "empty-fallback": "REJECT"
@@ -324,8 +339,10 @@ function main(config, profileName) {
       name: "全球手动",
       type: "select",
       icon: ICON.manual,
+      "exclude-type": GROUP_EXCLUDE_TYPES,
       // 直接节点按 香港→澳门→台湾→新加坡→韩国→日本→美国→欧洲→其他 排序。
-      // 不加入 DIRECT，确保被 AI 组引用时不会出现间接直连。
+      // provider 动态节点通过 use 引入，不参与这里的 JS 自然排序。
+      // 不加入 DIRECT，并排除自定义直连/绕过出站。
       ...(manualProxyNames.length > 0
         ? { proxies: [...manualProxyNames] }
         : providerNames.length === 0
@@ -345,6 +362,7 @@ function main(config, profileName) {
       type: "url-test",
       icon: ICON.auto,
       "include-all": true,
+      "exclude-type": GROUP_EXCLUDE_TYPES,
       "exclude-filter": EXCLUDE,
       url: TEST_URL,
       interval: INTERVAL,
@@ -415,6 +433,7 @@ function main(config, profileName) {
     SKULL_Google: domainProvider("google.mrs"),
     SKULL_GitHub: domainProvider("github.mrs"),
     SKULL_Microsoft: domainProvider("microsoft.mrs"),
+    SKULL_MicrosoftCN: domainProvider("microsoft@cn.mrs"),
     SKULL_AppleCN: domainProvider("apple@cn.mrs"),
     SKULL_Apple: domainProvider("apple.mrs"),
     SKULL_Telegram: domainProvider("telegram.mrs"),
@@ -434,6 +453,88 @@ function main(config, profileName) {
     ...(config["rule-providers"] || {}),
     ...customRuleProviders
   };
+
+  // 仅保留节点、provider 等显式引用的旧组及其传递依赖。
+  // 同名旧组使用稳定别名，避免覆盖脚本主组；辅助组隐藏，不加入 AI 选项。
+  const preserveDependencies = () => {
+    const newNames = new Set(config["proxy-groups"].map((group) => group.name));
+    const builtins = new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE", "GLOBAL"]);
+    const nodes = new Map();
+    for (const proxy of config.proxies || []) {
+      if (!proxy || typeof proxy.name !== "string") continue;
+      if (nodes.has(proxy.name) || newNames.has(proxy.name) || builtins.has(proxy.name)) {
+        throw new Error(`节点名称冲突：${proxy.name}。请为订阅节点设置唯一名称。`);
+      }
+      nodes.set(proxy.name, proxy);
+    }
+    const old = new Map();
+    for (const group of oldGroups) {
+      if (!group || typeof group.name !== "string") continue;
+      if (old.has(group.name) || nodes.has(group.name) || builtins.has(group.name)) {
+        throw new Error(`原配置名称冲突：${group.name}`);
+      }
+      old.set(group.name, group);
+    }
+    const used = new Set([...newNames, ...nodes.keys(), ...old.keys(), ...providerNames]);
+    const renamed = new Map();
+    const aliases = new Set();
+    const visiting = new Set();
+    const retained = [];
+
+    const resolve = (name) => {
+      if (typeof name !== "string" || !name || builtins.has(name)) return name;
+      if (visiting.has(name)) throw new Error(`代理依赖存在循环：${name}`);
+      if (renamed.has(name)) return renamed.get(name);
+      if (aliases.has(name)) return name;
+      if (old.has(name)) {
+        visiting.add(name);
+        let alias = name;
+        if (newNames.has(name)) {
+          alias = `__SKULL_DEP__${name}`;
+          while (used.has(alias)) alias = `_${alias}`;
+        }
+        used.add(alias);
+        const copy = { ...old.get(name), name: alias, hidden: true };
+        if (Array.isArray(copy.proxies)) copy.proxies = copy.proxies.map(resolve);
+        // default-selected 失效时由内核回退；只改写实际指向旧组的默认项。
+        if (old.has(copy["default-selected"])) {
+          copy["default-selected"] = resolve(copy["default-selected"]);
+        }
+        visiting.delete(name);
+        renamed.set(name, alias);
+        aliases.add(alias);
+        retained.push(copy);
+        return alias;
+      }
+      if (nodes.has(name)) {
+        visiting.add(name);
+        const proxy = nodes.get(name);
+        if (proxy["dialer-proxy"]) proxy["dialer-proxy"] = resolve(proxy["dialer-proxy"]);
+        visiting.delete(name);
+        return name;
+      }
+      // provider 动态节点尚未加载，无法在扩展脚本阶段枚举或验证其名字。
+      if (providerCount > 0 && !newNames.has(name)) return name;
+      throw new Error(`代理依赖不存在：${name}`);
+    };
+    const rewrite = (object, key) => {
+      if (object && object[key]) object[key] = resolve(object[key]);
+    };
+    for (const proxy of nodes.values()) rewrite(proxy, "dialer-proxy");
+    for (const name of providerNames) {
+      const provider = providers[name];
+      if (!provider || typeof provider !== "object") continue;
+      rewrite(provider, "proxy");
+      rewrite(provider.override, "dialer-proxy");
+      for (const proxy of provider.payload || []) rewrite(proxy, "dialer-proxy");
+    }
+    for (const provider of Object.values(config["rule-providers"])) rewrite(provider, "proxy");
+    for (const listener of config.listeners || []) rewrite(listener, "proxy");
+    for (const tunnel of config.tunnels || []) rewrite(tunnel, "proxy");
+    rewrite(config.ntp, "proxy");
+    config["proxy-groups"].push(...retained);
+  };
+  preserveDependencies();
 
   // ---------- 6. 分流规则 ----------
   // 优先级：LAN → AI → 特殊国际服务 → 中国域名 → 一般国外域名 → IP → MATCH
@@ -455,6 +556,7 @@ function main(config, profileName) {
 
     // 中国区 Apple 必须在通用 Apple 前直连
     "RULE-SET,SKULL_AppleCN,DIRECT",
+    "RULE-SET,SKULL_MicrosoftCN,DIRECT",
 
     // 常用国际服务
     "RULE-SET,SKULL_YouTube,YouTube",
@@ -488,6 +590,10 @@ function main(config, profileName) {
 
   // ---------- 7. DNS ----------
   // DNS 关键行为由脚本明确控制；国内域名使用国内 DNS 直连，其余域名使用境外 DNS 并经“国外流量”发送。
+  const DOMESTIC_DNS = [
+    "https://dns.alidns.com/dns-query#DIRECT",
+    "https://doh.pub/dns-query#DIRECT"
+  ];
   config.dns = {
     enable: true,
     ipv6: false,
@@ -525,21 +631,19 @@ function main(config, profileName) {
 
     // 国内域名：仅使用国内 DoH，并明确直连，保持国内 CDN / GeoDNS 结果。
     "nameserver-policy": {
-      "rule-set:SKULL_China": [
-        "https://dns.alidns.com/dns-query#DIRECT",
-        "https://doh.pub/dns-query#DIRECT"
-      ],
-      "rule-set:SKULL_Lan": [
-        "https://dns.alidns.com/dns-query#DIRECT",
-        "https://doh.pub/dns-query#DIRECT"
-      ]
+      "rule-set:SKULL_China": [...DOMESTIC_DNS],
+      "rule-set:SKULL_Lan": [...DOMESTIC_DNS],
+      "rule-set:SKULL_AppleCN": [...DOMESTIC_DNS],
+      "rule-set:SKULL_MicrosoftCN": [...DOMESTIC_DNS]
     },
 
+    // 已判定为 DIRECT 的域名连接独立解析，避免手选直连后仍依赖国外 DNS 出口。
+    // 不将所有 Apple/Microsoft 域名固定国内解析，保留手选代理时的默认 DNS 路径。
+    "direct-nameserver": [...DOMESTIC_DNS],
+    "direct-nameserver-follow-policy": false,
+
     // 代理服务器域名必须独立直连解析，避免 nameserver -> 国外流量 -> 节点域名解析形成循环依赖。
-    "proxy-server-nameserver": [
-      "https://dns.alidns.com/dns-query#DIRECT",
-      "https://doh.pub/dns-query#DIRECT"
-    ]
+    "proxy-server-nameserver": [...DOMESTIC_DNS]
   };
 
   // ---------- 8. TUN ----------
