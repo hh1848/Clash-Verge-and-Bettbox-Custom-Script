@@ -39,6 +39,18 @@
 
 ---
 
+## 效果展示
+
+<p align="center">
+  <img src="./assets/effect-preview.webp" alt="Clash Verge Rev 与 Bettbox 效果展示">
+</p>
+
+<p align="center">
+  <sub>左：Bettbox（Android）自定义规则开关 · 右：Clash Verge Rev 桌面端代理组</sub>
+</p>
+
+---
+
 ## 适用环境
 
 | 客户端 | 平台 | 脚本 | 说明 |
