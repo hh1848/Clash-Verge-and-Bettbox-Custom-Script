@@ -1,5 +1,5 @@
 // Clash Verge Rev 全局扩展脚本
-// Version: 2026.09.14-r1
+// Version: 2026.09.23-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
@@ -22,13 +22,28 @@ function main(config, profileName) {
   const TEST_URL = "https://www.gstatic.com/generate_204";
   const INTERVAL = 600;
   const RULE_INTERVAL = 86400;
+  // 防呆上限（字节）：超过该体积的规则集视为异常响应，内核会拒绝加载。
+  // 分流不会因此中断（匹配不到的规则集返回 false 并继续匹配后续规则），但该条规则会失效。
+  // 与 Bettbox 版保持同一取值。
+  const RULE_SET_SIZE_LIMIT = 16 * 1024 * 1024;
   const BYPASS_TYPES = ["direct", "pass", "compatible"];
   const GROUP_EXCLUDE_TYPES = "Direct|Pass|Compatible";
   const isProxyCandidate = (proxy) =>
     proxy && !BYPASS_TYPES.includes(String(proxy.type || "").toLowerCase());
 
+  // ---------- 诊断收集 ----------
+  // Clash Verge Rev 的 use_script 在脚本抛错时会把结果整体丢弃并回退到原配置，
+  // 且客户端日志只留下笼统的 "Script execution failed"（原始 err.toString() 被丢弃）。
+  // 因此任何异常都必须先落到 console，否则用户无从定位到底哪里出了问题。
+  // 注意：CVR 注入的 console 每个方法只接收一个参数，多余参数会被静默丢弃。
+  const issues = [];
+  const report = (message) => {
+    issues.push(message);
+    console.error(`[SKULL] ${message}`);
+  };
+
   // provider 节点的 url-test 依赖 provider 自身 health-check 数据。
-  // 仅补齐缺失项并强制启用，不覆盖机场已有的 url / interval / timeout 等配置。
+  // 仅补齐缺失项，不覆盖机场已有的 url / interval / timeout 等配置。
   const ensureProviderHealthCheck = (provider) => {
     if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
       return;
@@ -41,9 +56,14 @@ function main(config, profileName) {
         ? provider["health-check"]
         : {};
 
+    // 内核只有 health-check.enable 为 true 时才注册周期测速（见 provider/parse.go）。
+    // 机场显式写 false 通常是为了省流量，脚本不再强制打开，只补缺失项。
+    const enable =
+      typeof current.enable === "boolean" ? current.enable : true;
+
     provider["health-check"] = {
       ...current,
-      enable: true,
+      enable,
       url: current.url || TEST_URL,
       interval:
         typeof current.interval === "number" && current.interval > 0
@@ -54,6 +74,13 @@ function main(config, profileName) {
           ? current.lazy
           : true
     };
+
+    if (!enable) {
+      report(
+        `provider 显式关闭了健康检查（health-check.enable=false），已保留原设置；` +
+          `若该 provider 的节点在自动测速组中始终无延迟数据，请检查此项`
+      );
+    }
 
     // 仅默认 generate_204 配套补 204；自定义 URL 保持原有状态码语义。
     if (current["expected-status"] == null) {
@@ -274,11 +301,15 @@ function main(config, profileName) {
     "empty-fallback": "REJECT"
   });
 
-  const DOMAIN_BASE =
-    "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/";
+  // 规则集版本锚点。@meta 是可变分支，远端内容随时可能变化，等于把分流裁决权
+  // 一次性外包给 jsDelivr 上的一条可写分支。需要确定性时改成固定 tag 或 commit SHA，
+  // 例如 "2026.09.20" 或 40 位 commit，改完必须清空一次规则集缓存。
+  const RULESET_REF = "meta";
+  const RULESET_HOST = "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat";
 
-  const IP_BASE =
-    "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/";
+  const DOMAIN_BASE = `${RULESET_HOST}@${RULESET_REF}/geo/geosite/`;
+
+  const IP_BASE = `${RULESET_HOST}@${RULESET_REF}/geo/geoip/`;
 
   const domainProvider = (file) => ({
     type: "http",
@@ -286,7 +317,8 @@ function main(config, profileName) {
     format: "mrs",
     path: `./ruleset/skull/${file}`,
     url: DOMAIN_BASE + file,
-    interval: RULE_INTERVAL
+    interval: RULE_INTERVAL,
+    "size-limit": RULE_SET_SIZE_LIMIT
   });
 
   const ipProvider = (file) => ({
@@ -295,7 +327,8 @@ function main(config, profileName) {
     format: "mrs",
     path: `./ruleset/skull/ip-${file}`,
     url: IP_BASE + file,
-    interval: RULE_INTERVAL
+    interval: RULE_INTERVAL,
+    "size-limit": RULE_SET_SIZE_LIMIT
   });
 
   // ---------- 4. 策略组 ----------
@@ -462,16 +495,41 @@ function main(config, profileName) {
     const nodes = new Map();
     for (const proxy of config.proxies || []) {
       if (!proxy || typeof proxy.name !== "string") continue;
-      if (nodes.has(proxy.name) || newNames.has(proxy.name) || builtins.has(proxy.name)) {
-        throw new Error(`节点名称冲突：${proxy.name}。请为订阅节点设置唯一名称。`);
+      if (nodes.has(proxy.name)) {
+        report(`订阅中存在重复节点名「${proxy.name}」，已跳过重复项`);
+        continue;
+      }
+      if (newNames.has(proxy.name) || builtins.has(proxy.name)) {
+        report(
+          `节点名「${proxy.name}」与内置策略或脚本策略组重名，已跳过该节点的依赖重写，建议在订阅端改名`
+        );
+        continue;
       }
       nodes.set(proxy.name, proxy);
     }
     const old = new Map();
+    // 旧组原名 -> 因与节点重名而改用的别名，供 resolve 与 default-selected 转换。
+    const preAlias = new Map();
     for (const group of oldGroups) {
       if (!group || typeof group.name !== "string") continue;
-      if (old.has(group.name) || nodes.has(group.name) || builtins.has(group.name)) {
-        throw new Error(`原配置名称冲突：${group.name}`);
+      if (preAlias.has(group.name)) continue;
+      if (old.has(group.name)) {
+        report(`原配置中存在重复策略组「${group.name}」，已跳过重复项`);
+        continue;
+      }
+      if (builtins.has(group.name)) {
+        report(`原配置策略组「${group.name}」与内置策略重名，已跳过`);
+        continue;
+      }
+      if (nodes.has(group.name)) {
+        // 旧组与订阅节点重名时无法按原名保留，改用稳定别名并隐藏，避免整套脚本失效。
+        const alias = `__SKULL_OLD__${group.name}`;
+        preAlias.set(group.name, alias);
+        old.set(alias, { ...group, name: alias, hidden: true });
+        report(
+          `原配置策略组「${group.name}」与订阅节点重名，已重命名为「${alias}」并作为隐藏组保留`
+        );
+        continue;
       }
       old.set(group.name, group);
     }
@@ -483,7 +541,12 @@ function main(config, profileName) {
 
     const resolve = (name) => {
       if (typeof name !== "string" || !name || builtins.has(name)) return name;
-      if (visiting.has(name)) throw new Error(`代理依赖存在循环：${name}`);
+      // 旧组因与节点重名已被改名，引用需要先映射到别名。
+      if (preAlias.has(name)) name = preAlias.get(name);
+      if (visiting.has(name)) {
+        report(`代理依赖存在循环：${name}，已切断该引用`);
+        return "REJECT";
+      }
       if (renamed.has(name)) return renamed.get(name);
       if (aliases.has(name)) return name;
       if (old.has(name)) {
@@ -497,8 +560,11 @@ function main(config, profileName) {
         const copy = { ...old.get(name), name: alias, hidden: true };
         if (Array.isArray(copy.proxies)) copy.proxies = copy.proxies.map(resolve);
         // default-selected 失效时由内核回退；只改写实际指向旧组的默认项。
-        if (old.has(copy["default-selected"])) {
-          copy["default-selected"] = resolve(copy["default-selected"]);
+        const defaultSelected = copy["default-selected"];
+        if (typeof defaultSelected === "string" && preAlias.has(defaultSelected)) {
+          copy["default-selected"] = preAlias.get(defaultSelected);
+        } else if (old.has(defaultSelected)) {
+          copy["default-selected"] = resolve(defaultSelected);
         }
         visiting.delete(name);
         renamed.set(name, alias);
@@ -513,9 +579,11 @@ function main(config, profileName) {
         visiting.delete(name);
         return name;
       }
-      // provider 动态节点尚未加载，无法在扩展脚本阶段枚举或验证其名字。
-      if (providerCount > 0 && !newNames.has(name)) return name;
-      throw new Error(`代理依赖不存在：${name}`);
+      // 脚本自建的策略组名本身是合法引用目标（listeners / ntp / rule-provider 都可能指向它），
+      // 必须放行；provider 动态节点在扩展脚本阶段无法枚举，也只能放行。
+      if (newNames.has(name) || providerCount > 0) return name;
+      report(`代理依赖不存在：${name}，已替换为 REJECT`);
+      return "REJECT";
     };
     const rewrite = (object, key) => {
       if (object && object[key]) object[key] = resolve(object[key]);
@@ -531,7 +599,9 @@ function main(config, profileName) {
     for (const provider of Object.values(config["rule-providers"])) rewrite(provider, "proxy");
     for (const listener of config.listeners || []) rewrite(listener, "proxy");
     for (const tunnel of config.tunnels || []) rewrite(tunnel, "proxy");
-    rewrite(config.ntp, "proxy");
+    // 内核 RawNTP 里的字段名是 dialer-proxy，不存在 ntp.proxy。
+    // 原写法 "proxy" 让这段检查从未生效，而真正需要保护的 dialer-proxy 也没被覆盖到。
+    rewrite(config.ntp, "dialer-proxy");
     config["proxy-groups"].push(...retained);
   };
   preserveDependencies();
@@ -590,11 +660,22 @@ function main(config, profileName) {
 
   // ---------- 7. DNS ----------
   // DNS 关键行为由脚本明确控制；国内域名使用国内 DNS 直连，其余域名使用境外 DNS 并经“国外流量”发送。
+  //
+  // 关于与客户端的关系：脚本执行后，客户端会把自己的 DNS 覆写设置 extend 到这段配置上
+  // （同名键以客户端为准）。所以这里采用“浅合并 + 覆盖式写入”，既保证脚本的键优先，
+  // 又不会在客户端未开启 DNS 覆写时把订阅自带的 dns 细节（fallback 等）整段丢掉。
+  const oldDns =
+    config.dns && typeof config.dns === "object" && !Array.isArray(config.dns)
+      ? config.dns
+      : {};
+
   const DOMESTIC_DNS = [
     "https://dns.alidns.com/dns-query#DIRECT",
     "https://doh.pub/dns-query#DIRECT"
   ];
   config.dns = {
+    ...oldDns,
+
     enable: true,
     ipv6: false,
     "prefer-h3": false,
@@ -605,16 +686,19 @@ function main(config, profileName) {
     "fake-ip-filter-mode": "blacklist",
 
     "fake-ip-filter": [
-      "*.lan",
-      "*.local",
-      "localhost.ptlogin2.qq.com",
-      "time.*.com",
-      "time.*.gov",
-      "time.*.edu.cn",
-      "ntp.*.com",
-      "+.pool.ntp.org",
-      "+.msftconnecttest.com",
-      "+.msftncsi.com"
+      ...new Set([
+        ...(Array.isArray(oldDns["fake-ip-filter"]) ? oldDns["fake-ip-filter"] : []),
+        "*.lan",
+        "*.local",
+        "localhost.ptlogin2.qq.com",
+        "time.*.com",
+        "time.*.gov",
+        "time.*.edu.cn",
+        "ntp.*.com",
+        "+.pool.ntp.org",
+        "+.msftconnecttest.com",
+        "+.msftncsi.com"
+      ])
     ],
 
     // 仅用于 DNS 上游域名 bootstrap；不承担普通业务域名解析。
@@ -647,30 +731,38 @@ function main(config, profileName) {
   };
 
   // ---------- 8. TUN ----------
-  // 不强制开启，保留 Clash Verge Rev 当前 TUN 开关状态
+  // 不强制开启，保留 Clash Verge Rev 当前 TUN 开关状态。
+  //
+  // enable / stack / auto-route / auto-detect-interface / strict-route / dns-hijack
+  // 全部属于客户端的 TUN 权威键：只要客户端生成的配置里原本存在该键，脚本写入的值
+  // 都会在脚本执行之后被 enforce_tun 回写覆盖。因此这里只在键缺失时补默认值，
+  // 不再无条件硬写 true——那会覆盖用户在 YAML 里显式写的 false，且多为无效动作。
   const oldTun = config.tun || {};
+  const tunDefault = (key, fallback) =>
+    oldTun[key] === undefined ? fallback : oldTun[key];
 
   config.tun = {
     ...oldTun,
 
-    enable:
-      typeof oldTun.enable === "boolean"
-        ? oldTun.enable
-        : false,
+    enable: tunDefault("enable", false),
+    stack: tunDefault("stack", "mixed"),
+    "auto-route": tunDefault("auto-route", true),
+    "auto-detect-interface": tunDefault("auto-detect-interface", true),
+    "strict-route": tunDefault("strict-route", true),
 
-    stack: oldTun.stack || "mixed",
-
-    "auto-route": true,
-    "auto-detect-interface": true,
-    "strict-route": true,
-
-    "dns-hijack": [
+    "dns-hijack": tunDefault("dns-hijack", [
       "any:53",
       "tcp://any:53"
-    ]
+    ])
   };
 
   // ---------- 9. 常规增强 ----------
+  // ⚠ 其中 mode / unified-delay 属于客户端「控制面权威字段」（CONTROL_PLANE_KEYS）：
+  //   脚本执行后 authoritative.enforce 会用客户端快照里的值回写覆盖，
+  //   且该键在客户端配置中缺失时会被直接从最终配置里删除。
+  //   所以这两行只在"订阅本身未定义该键"时才是最终值，实际行为以客户端设置为准。
+  //   tcp-concurrent / find-process-mode 不在 CONTROL_PLANE_KEYS 中，
+  //   客户端只在脚本**之前**经 merge_default_config 注入，脚本写入是有效的。
   config.mode = "rule";
   config["unified-delay"] = true;
   config["tcp-concurrent"] = true;
@@ -681,6 +773,12 @@ function main(config, profileName) {
     "store-selected": true,
     "store-fake-ip": true
   };
+
+  if (issues.length > 0) {
+    console.error(
+      `[SKULL] 本次共 ${issues.length} 处异常已按降级策略处理，逐条原因见上方日志`
+    );
+  }
 
   return config;
 }

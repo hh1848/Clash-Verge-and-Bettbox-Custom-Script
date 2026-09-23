@@ -23,7 +23,7 @@
 
 因此更换机场后，可以继续使用同一套代理组结构和分流逻辑。脚本中**不需要填写机场 URL**，也不包含任何节点信息。
 
-当前脚本版本：**Clash Verge Rev `2026.09.14-r1`** / **Bettbox `2026.09.23-r1`**。
+当前脚本版本：**两版均为 `2026.09.23-r1`**。
 
 ### 当前设计重点
 
@@ -484,7 +484,9 @@ profile:
   store-fake-ip: true
 ```
 
-TUN 会在客户端原配置基础上补充：
+> `mode` 与 `unified-delay` 属于客户端控制面权威字段（`CONTROL_PLANE_KEYS`），会被 `authoritative.enforce` 在脚本**之后**回写；该键在客户端配置中缺失时甚至会被直接删除。所以实际模式以客户端选择器为准。`tcp-concurrent` / `find-process-mode` 不在该清单内，脚本写入有效。
+
+TUN 会在客户端原配置基础上**补缺失项**：
 
 ```yaml
 stack: mixed
@@ -497,6 +499,8 @@ dns-hijack:
 ```
 
 脚本**不会强制开启 TUN**，`enable` 仍服从客户端现有状态。
+
+> 上面这些键都是客户端的 TUN 权威键（`constants::tun::GUI_KEYS`）：只要客户端生成的配置里原本就存在该键，`enforce_tun` 会在脚本**之后**回写覆盖。因此脚本只在键**缺失**时补默认值——无条件硬写既会覆盖用户在 YAML 里显式写的 `false`，多数情况下也是无效动作。
 
 ### Bettbox
 
@@ -591,6 +595,15 @@ JavaScript 排序只能直接处理 `config.proxies` 中已经展开的节点。
 <summary><b>规则集首次加载失败怎么办？</b></summary>
 
 Rule Providers 通过 jsDelivr 获取 `.mrs` 文件。首次加载需要网络可达；失败时相关流量会继续匹配后续规则或最终进入 `漏网之鱼`，后续按 interval 重新更新。
+
+</details>
+
+<details>
+<summary><b>规则集提示体积超限，或者担心上游内容变化？</b></summary>
+
+两版脚本都为每个 Rule Provider 设置了 `size-limit`（16 MiB）。超过该体积的响应会被内核拒绝加载，相关流量回落到后续规则——正常 `.mrs` 文件远小于此值，触发通常意味着上游异常或响应被中间设备替换。
+
+另外，规则集 URL 指向 `meta-rules-dat` 的 **`@meta` 可变分支**，上游改动会在下一个 `interval`（86400s）到期时静默生效。需要确定性时，把脚本里的 `RULESET_REF` 改成固定 tag 或 commit SHA 即可——**改完必须清空一次规则集缓存**，否则会继续使用已下载的旧文件。
 
 </details>
 
