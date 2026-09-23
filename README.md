@@ -23,7 +23,7 @@
 
 因此更换机场后，可以继续使用同一套代理组结构和分流逻辑。脚本中**不需要填写机场 URL**，也不包含任何节点信息。
 
-当前脚本版本：**2026.09.14-r1**。
+当前脚本版本：**Clash Verge Rev `2026.09.14-r1`** / **Bettbox `2026.09.23-r1`**。
 
 ### 当前设计重点
 
@@ -373,6 +373,8 @@ fake-ip-filter-mode: blacklist
 - 用户将普通国际服务手动切到 `DIRECT` 时，可使用独立 `direct-nameserver`，避免仍依赖境外代理 DNS
 - 代理服务器域名独立解析，避免 `nameserver → 国外流量 → 节点域名解析` 形成循环依赖
 
+> **Bettbox 前提**：脚本把 `enable` 显式写成 `true` 是有意为之——客户端的 `patchRawConfig()` 只在 `overrideDns 为真` 或 `dns.enable` 不为 `true` 时，才用 App 内的 DNS 配置**整体替换**整段 `dns` 并清空 `nameserver-policy`。换句话说：**只要在 App 里打开了「DNS 覆写」，本节的所有策略都会失效。** 要使用本脚本的 DNS 设计，请在 App 中关闭 DNS 覆写。
+
 ### Fake-IP Filter
 
 两版均包含局域网、时间同步、QQ 登录等基础排除项。Clash Verge Rev 版另外加入：
@@ -396,13 +398,24 @@ fake-ip-filter-mode: blacklist
 - Rule Providers 的 `proxy`
 - listeners
 - tunnels
-- NTP
+- NTP 的 `dialer-proxy`
 
 只有真正被引用的旧组及其传递依赖会被保留，并统一设置 `hidden: true`。
 
 若旧组名称与脚本主组重名，会使用 `__SKULL_DEP__...` 形式生成隐藏别名，避免覆盖脚本主策略组。
 
-若发现明确的节点名称冲突、旧组名称冲突或循环依赖，脚本会直接抛出错误，而不是静默生成不可预测配置。
+若发现节点／旧组名称冲突、循环依赖或指向不存在目标的引用，脚本会**就地降级并逐条告警**，而不是中断执行：
+
+- 重复名称：跳过重复项
+- 旧组与订阅节点重名：改用 `__SKULL_OLD__...` 作为隐藏组保留
+- 依赖成环或指向不存在的目标：切断该引用并替换为 `REJECT`
+- provider 显式关闭 `health-check`：遵循原设置，不改写
+
+> 之所以不抛错：Bettbox 的 `handleEvaluate` 在脚本抛错时会丢弃全部产出、回退到**未覆写的原配置**，用户只得到一个错误提示条，实际拿到的是机场裸配置而非"部分生效"的脚本。就地降级至少能保证策略组与规则结构完好。
+
+> 降级刻意**不使用 `DIRECT`** 兜底——把未知引用指向直连会造成隐私泄漏，`REJECT` 只影响可用性。
+
+降级原因通过 `console.error` 写入客户端日志（Bettbox 日志面板 / Clash Verge Rev 日志），末尾另有一行 `共 N 处异常已按降级策略处理` 汇总。
 
 ---
 
@@ -448,10 +461,12 @@ Netflix
 | 节点自然排序 | 纯 JS 实现，避免依赖 `Intl` | 同一套纯 JS 实现，兼容 QuickJS |
 | provider 引用 | `use: providerNames` | `use: providerNames` |
 | 可视化开关 | 无 | 12 个 |
-| `find-process-mode` | `strict` | `off` |
-| 顶层 `ipv6` | 不强制覆盖 | `false` |
+| `find-process-mode` | `strict` | `off` ※ |
+| 顶层 `ipv6` | 不强制覆盖 | `false` ※ |
 | TUN | 在原配置上补充 `mixed`、auto-route、strict-route、auto-detect-interface、DNS hijack；不强制开启 | 不覆写 `config.tun` |
 | Fake-IP Filter | 基础项 + Windows/NTP 额外项 | 基础项 |
+
+※ Bettbox 在脚本执行**之后**会无条件改写这些字段（`lib/state.dart` 的 `patchRawConfig`），实际取值由 App 内设置决定。详见下方「常规增强参数」。
 
 ---
 
@@ -496,7 +511,11 @@ profile:
   store-fake-ip: true
 ```
 
-Android 的 TUN / VPN 生命周期交由 Bettbox 自身管理，因此脚本不修改 `config.tun`。
+> **注意：以上 5 个字段在 Bettbox 上不会生效。** 脚本运行于 `State.patchRawConfig()` 的第 627 行，而客户端在其后（665–679 行）对这 5 个字段**无条件赋值**，取值来自 App 内设置。保留这段代码只为与其他客户端的同源脚本保持结构一致，并作为「不启用客户端覆写」场景的兜底；要改变这些行为请改 App 设置。
+>
+> 其中只有 `profile.store-selected` / `store-fake-ip` 是真正生效的——客户端对这两项使用 `== null` 判断，仅补缺失值。
+
+Android 的 TUN / VPN 生命周期交由 Bettbox 自身管理，因此脚本不修改 `config.tun`（客户端同样会无条件写入 TUN 的全部字段，脚本写了也无效）。
 
 ---
 

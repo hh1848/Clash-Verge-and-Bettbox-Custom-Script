@@ -1,3 +1,5 @@
+// 仅作标记：Bettbox 的 JavaScriptRuntimeManager.extractScriptOptions 只读取顶层
+// 变量 ruleOptionsEnable（开关默认值）与 serviceConfigs（开关图标表），不读取本变量。
 const Compatible_With_Bettbox = { ruleOptionsEnable: true };
 
 // Bettbox v1.18.8+ 可视化覆写开关；关闭服务组后对应规则回落到“国外流量”。
@@ -34,7 +36,7 @@ var serviceConfigs = [
 ];
 
 // Bettbox Android 全局覆写脚本
-// Version: 2026.09.14-r1
+// Version: 2026.09.23-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：设置 -> 高级设置 -> 脚本；配置 -> 订阅 -> 覆写 -> 脚本。
 
@@ -71,6 +73,17 @@ function main(config) {
   const isProxyCandidate = (proxy) =>
     proxy && !BYPASS_TYPES.includes(String(proxy.type || "").toLowerCase());
 
+  // ---------- 诊断收集 ----------
+  // Bettbox 的 State.handleEvaluate 在脚本抛错时回退到原配置（返回未修改的 config），
+  // 并把错误以通知条形式展示给用户。这比静默失败好，但后果仍是"整套脚本白跑一遍"。
+  // 因此任何异常都应就地降级（改名 / 别名 / 切断引用）+ 记录日志，而不是中断执行。
+  // 注意：QuickJS 的 console.error 被映射到 print，只可靠输出第一个参数。
+  const issues = [];
+  const report = (message) => {
+    issues.push(message);
+    console.error(`[SKULL] ${message}`);
+  };
+
   // provider 节点的 url-test 依赖 provider 自身 health-check 数据。
   // 仅补齐缺失项并强制启用，不覆盖机场已有的 url / interval / timeout 等配置。
   const ensureProviderHealthCheck = (provider) => {
@@ -85,9 +98,14 @@ function main(config) {
         ? provider["health-check"]
         : {};
 
+    // 内核只有 health-check.enable 为 true 时才注册周期测速（见 provider/parse.go）。
+    // 机场显式写 false 通常是为了省流量，脚本不再强制打开，只补缺失项。
+    const enable =
+      typeof current.enable === "boolean" ? current.enable : true;
+
     provider["health-check"] = {
       ...current,
-      enable: true,
+      enable,
       url: current.url || TEST_URL,
       interval:
         typeof current.interval === "number" && current.interval > 0
@@ -98,6 +116,13 @@ function main(config) {
           ? current.lazy
           : true
     };
+
+    if (!enable) {
+      report(
+        `provider 显式关闭了健康检查（health-check.enable=false），已保留原设置；` +
+          `若该 provider 的节点在自动测速组中始终无延迟数据，请检查此项`
+      );
+    }
 
     // 仅默认 generate_204 配套补 204；自定义 URL 保持原有状态码语义。
     if (current["expected-status"] == null) {
@@ -291,11 +316,18 @@ function main(config) {
     "empty-fallback": "REJECT"
   });
 
-  const DOMAIN_BASE =
-    "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/";
+  // 规则集来源固定为 meta-rules-dat 的 @meta 分支（可变引用）。
+  // 如需更强的可复现性，可将其替换为某个 release tag 或 commit SHA（替换后需清一次缓存）。
+  const RULESET_REF = "meta";
+  const RULESET_HOST = "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat";
 
-  const IP_BASE =
-    "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/";
+  const DOMAIN_BASE = `${RULESET_HOST}@${RULESET_REF}/geo/geosite/`;
+
+  const IP_BASE = `${RULESET_HOST}@${RULESET_REF}/geo/geoip/`;
+
+  // 防呆上限（字节）：超过该体积的规则集视为异常响应，内核会拒绝加载。
+  // 分流不会因此中断（匹配不到的规则集返回 false 并继续匹配后续规则），但该条规则会失效。
+  const RULESET_SIZE_LIMIT = 16 * 1024 * 1024;
 
   const domainProvider = (file) => ({
     type: "http",
@@ -303,7 +335,8 @@ function main(config) {
     format: "mrs",
     path: `./ruleset/skull/${file}`,
     url: DOMAIN_BASE + file,
-    interval: RULE_INTERVAL
+    interval: RULE_INTERVAL,
+    "size-limit": RULESET_SIZE_LIMIT
   });
 
   const ipProvider = (file) => ({
@@ -312,7 +345,8 @@ function main(config) {
     format: "mrs",
     path: `./ruleset/skull/ip-${file}`,
     url: IP_BASE + file,
-    interval: RULE_INTERVAL
+    interval: RULE_INTERVAL,
+    "size-limit": RULESET_SIZE_LIMIT
   });
 
   // ---------- 4. 策略组 ----------
@@ -538,16 +572,41 @@ function main(config) {
     const nodes = new Map();
     for (const proxy of config.proxies || []) {
       if (!proxy || typeof proxy.name !== "string") continue;
-      if (nodes.has(proxy.name) || newNames.has(proxy.name) || builtins.has(proxy.name)) {
-        throw new Error(`节点名称冲突：${proxy.name}。请为订阅节点设置唯一名称。`);
+      if (nodes.has(proxy.name)) {
+        report(`订阅中存在重复节点名「${proxy.name}」，已跳过重复项`);
+        continue;
+      }
+      if (newNames.has(proxy.name) || builtins.has(proxy.name)) {
+        report(
+          `节点名「${proxy.name}」与内置策略或脚本策略组重名，已跳过该节点的依赖重写，建议在订阅端改名`
+        );
+        continue;
       }
       nodes.set(proxy.name, proxy);
     }
     const old = new Map();
+    // 旧组原名 -> 因与节点重名而改用的别名，供 resolve 与 default-selected 转换。
+    const preAlias = new Map();
     for (const group of oldGroups) {
       if (!group || typeof group.name !== "string") continue;
-      if (old.has(group.name) || nodes.has(group.name) || builtins.has(group.name)) {
-        throw new Error(`原配置名称冲突：${group.name}`);
+      if (preAlias.has(group.name)) continue;
+      if (old.has(group.name)) {
+        report(`原配置中存在重复策略组「${group.name}」，已跳过重复项`);
+        continue;
+      }
+      if (builtins.has(group.name)) {
+        report(`原配置策略组「${group.name}」与内置策略重名，已跳过`);
+        continue;
+      }
+      if (nodes.has(group.name)) {
+        // 旧组与订阅节点重名时无法按原名保留，改用稳定别名并隐藏，避免整套脚本失效。
+        const alias = `__SKULL_OLD__${group.name}`;
+        preAlias.set(group.name, alias);
+        old.set(alias, { ...group, name: alias, hidden: true });
+        report(
+          `原配置策略组「${group.name}」与订阅节点重名，已重命名为「${alias}」并作为隐藏组保留`
+        );
+        continue;
       }
       old.set(group.name, group);
     }
@@ -559,7 +618,12 @@ function main(config) {
 
     const resolve = (name) => {
       if (typeof name !== "string" || !name || builtins.has(name)) return name;
-      if (visiting.has(name)) throw new Error(`代理依赖存在循环：${name}`);
+      // 旧组因与节点重名已被改名，引用需要先映射到别名。
+      if (preAlias.has(name)) name = preAlias.get(name);
+      if (visiting.has(name)) {
+        report(`代理依赖存在循环：${name}，已切断该引用`);
+        return "REJECT";
+      }
       if (renamed.has(name)) return renamed.get(name);
       if (aliases.has(name)) return name;
       if (old.has(name)) {
@@ -573,8 +637,11 @@ function main(config) {
         const copy = { ...old.get(name), name: alias, hidden: true };
         if (Array.isArray(copy.proxies)) copy.proxies = copy.proxies.map(resolve);
         // default-selected 失效时由内核回退；只改写实际指向旧组的默认项。
-        if (old.has(copy["default-selected"])) {
-          copy["default-selected"] = resolve(copy["default-selected"]);
+        const defaultSelected = copy["default-selected"];
+        if (typeof defaultSelected === "string" && preAlias.has(defaultSelected)) {
+          copy["default-selected"] = preAlias.get(defaultSelected);
+        } else if (old.has(defaultSelected)) {
+          copy["default-selected"] = resolve(defaultSelected);
         }
         visiting.delete(name);
         renamed.set(name, alias);
@@ -589,9 +656,11 @@ function main(config) {
         visiting.delete(name);
         return name;
       }
-      // provider 动态节点尚未加载，无法在扩展脚本阶段枚举或验证其名字。
-      if (providerCount > 0 && !newNames.has(name)) return name;
-      throw new Error(`代理依赖不存在：${name}`);
+      // 脚本自建的策略组名本身是合法引用目标（listeners / tunnels / ntp / rule-provider
+      // 都可能指向它），必须放行；provider 动态节点在扩展脚本阶段无法枚举，也只能放行。
+      if (newNames.has(name) || providerCount > 0) return name;
+      report(`代理依赖不存在：${name}，已替换为 REJECT`);
+      return "REJECT";
     };
     const rewrite = (object, key) => {
       if (object && object[key]) object[key] = resolve(object[key]);
@@ -607,7 +676,9 @@ function main(config) {
     for (const provider of Object.values(config["rule-providers"])) rewrite(provider, "proxy");
     for (const listener of config.listeners || []) rewrite(listener, "proxy");
     for (const tunnel of config.tunnels || []) rewrite(tunnel, "proxy");
-    rewrite(config.ntp, "proxy");
+    // 内核 RawNTP 里用于指定出站代理的字段名是 "dialer-proxy"，不存在 "ntp.proxy"。
+    // 原脚本写成 "proxy" 导致这段检查从未生效，而真正需要保护的 dialer-proxy 反而不在范围内。
+    rewrite(config.ntp, "dialer-proxy");
     config["proxy-groups"].push(...retained);
   };
   preserveDependencies();
@@ -667,6 +738,14 @@ function main(config) {
   // ---------- 7. DNS ----------
   // 国内规则命中时直连解析；其余域名默认通过“国外流量”查询境外 DoH。
   // 未收录的国内域名可能先经境外 DNS 解析，再由中国 IP 规则判定直连。
+  //
+  // ⚠ Bettbox 侧的关键前提（见 State.patchRawConfig 第 769-798 行）：
+  //   客户端只在 `overrideDns 为真` 或 `脚本未把 dns.enable 置为 true` 时，
+  //   才用 App 内的 DNS 配置**整体替换** rawConfig.dns。
+  //   因此下面 `enable: true` 是有意为之——它让脚本的 DNS 段得以保留。
+  //   但只要用户在 App 里打开了「DNS 覆写」，本段仍会被整体替换掉
+  //   （nameserver / nameserver-policy / direct-nameserver / proxy-server-nameserver 全部失效）。
+  //   要使用本脚本的 DNS 策略，请在 App 中关闭 DNS 覆写。
   const DOMESTIC_DNS = [
     "https://dns.alidns.com/dns-query#DIRECT",
     "https://doh.pub/dns-query#DIRECT"
@@ -724,6 +803,13 @@ function main(config) {
   // 这里不覆写 config.tun，避免脚本参数与 Android VPN 层互相覆盖。
 
   // ---------- 9. 常规增强 ----------
+  // ⚠ 以下 5 个字段在 Bettbox 上属于「客户端权威字段」：
+  //   脚本于 State.patchRawConfig 第 627 行执行，而客户端在**其后**（665-679 行）无条件写入
+  //   tcp-concurrent / unified-delay / ipv6 / find-process-mode / mode，
+  //   取值来自 App 内的设置（ClashConfig）。也就是说这里写什么都会被覆盖。
+  //   保留这几行是为了：① 与其他客户端的同源脚本保持结构一致；
+  //   ② 若某天启用「不使用客户端配置覆写」的场景，这些值仍能作为兜底生效。
+  //   需要真正改变这些行为时，请改 App 设置，而不是改这里。
   config.mode = "rule";
   config.ipv6 = false;
   config["unified-delay"] = true;
@@ -735,6 +821,12 @@ function main(config) {
     "store-selected": true,
     "store-fake-ip": true
   };
+
+  if (issues.length > 0) {
+    console.error(
+      `[SKULL] 本次共 ${issues.length} 处异常已按降级策略处理，逐条原因见上方日志`
+    );
+  }
 
   return config;
 }
