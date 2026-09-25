@@ -23,14 +23,14 @@
 
 因此更换机场后，可以继续使用同一套代理组结构和分流逻辑。脚本中**不需要填写机场 URL**，也不包含任何节点信息。
 
-当前脚本版本：**两版均为 `2026.09.25-r1`**。
+当前脚本版本：**两版均为 `2026.09.23-r1`**。
 
 ### 当前设计重点
 
 - 国内流量优先 `DIRECT`，明确的国外域名统一交给 `国外流量`
 - ChatGPT / Claude / Gemini & NotebookLM 独立分流，**AI 组不提供任何 DIRECT 路径**
 - Google / GitHub / Microsoft / Apple / Telegram / X / YouTube / Netflix 独立分流
-- Google / Apple / Microsoft 中国区规则前置直连
+- Apple 中国区与 Microsoft 中国区规则前置直连
 - 8 个主要地区 + `其他地区`，采用“**地区聚合组 + 隐藏自动测速子组**”结构
 - `全球手动` 自动过滤机场公告、流量提示等伪节点，并按地区 + 数字自然排序
 - 自动补全 `proxy-providers` 的 health-check，尽量保留机场原有测速参数
@@ -46,7 +46,7 @@
 | **Clash Verge Rev** | Windows / macOS / Linux | [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) | 桌面版，补充 TUN 路由与 DNS 劫持参数 |
 | **Bettbox**（v1.18.8+） | Android | [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) | Android 版，支持可视化覆写开关，不接管 App 的 TUN/VPN 生命周期 |
 
-必须使用 **Mihomo v1.19.27 或更高版本**，并确保客户端支持 `include-all`、`exclude-type`、Rule Providers、`.mrs`、`empty-fallback` 等相关特性。`empty-fallback` 用于在筛选结果为空时回落到 `REJECT`，避免 AI 组意外走兼容直连路径。
+必须使用 **Mihomo 内核**以及支持 `include-all`、`exclude-type`、Rule Providers、`.mrs` 等相关特性的客户端。
 
 ---
 
@@ -91,7 +91,7 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
         ┌───────────────────┼───────────────────┐
         ▼                   ▼                   ▼
   proxy-groups            rules          rule-providers
-  33 个脚本组            29 条              23 个
+  33 个脚本组            28 条              22 个
   24 可见 + 9 隐藏                         │
         │                                  │
         └────────────── DNS ───────────────┘
@@ -110,8 +110,8 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
 | 脚本定义策略组 | **33** | **33** |
 | 主界面可见组 | **24** | **24** |
 | 隐藏地区测速组 | **9** | **9** |
-| 分流规则 | **29** | **29** |
-| Rule Providers | **23** | **23** |
+| 分流规则 | **28** | **28** |
+| Rule Providers | **22** | **22** |
 
 Bettbox 关闭服务或地区开关后，对应组会动态减少。
 
@@ -156,7 +156,7 @@ AI 组选项仅包含：
 自动选择 / 全球手动 / 各地区聚合组 / DIRECT
 ```
 
-其中 Google、Apple、Microsoft 中国区由前置规则直接 `DIRECT`，不会被国际服务组抢走。
+其中 Apple 中国区、Microsoft 中国区由前置规则直接 `DIRECT`，不会被国际服务组抢走。
 
 ### 地区聚合组（9 个，可见）
 
@@ -249,7 +249,7 @@ Expire / Traffic Remaining / Website ...
 
 脚本会遍历现有 `proxy-providers` 并确保 health-check 可用：
 
-- 缺少 `enable` 时补 `true`；若机场显式设置 `enable: false`，则保留原值并输出告警
+- 强制 `enable: true`
 - 缺少测速 URL 时使用 `https://www.gstatic.com/generate_204`
 - 缺少 interval 时使用 `600`
 - 缺少 lazy 时使用 `true`
@@ -262,26 +262,25 @@ Expire / Traffic Remaining / Website ...
 
 ## 分流规则
 
-共 **29 条**，自上而下匹配，命中即停止。
+共 **28 条**，自上而下匹配，命中即停止。
 
 | 阶段 | 内容 | 目标 | 条数 |
 | --- | --- | --- | ---: |
 | 1 | `private` 局域网域名 | `DIRECT` | 1 |
 | 2 | NotebookLM / AI Studio / Gemini API 精确域名 | `Gemini / NotebookLM` | 5 |
 | 3 | `openai` / `anthropic` / `google-gemini` | 三个 AI 组 | 3 |
-| 4 | `google-cn` / `apple@cn` / `microsoft@cn` | `DIRECT` | 3 |
+| 4 | `apple@cn` / `microsoft@cn` | `DIRECT` | 2 |
 | 5 | YouTube / Google / GitHub / Microsoft / Apple / Telegram / X / Netflix | 对应服务组 | 8 |
 | 6 | `cn` 中国大陆域名 | `DIRECT` | 1 |
 | 7 | `geolocation-!cn` | `国外流量` | 1 |
 | 8 | private / Google / Telegram / Twitter / Netflix IP | 对应目标，`no-resolve` | 5 |
 | 9 | China IP | `DIRECT`，允许解析 | 1 |
 | 末 | `MATCH` | `漏网之鱼` | 1 |
-|  | **合计** |  | **29** |
+|  | **合计** |  | **28** |
 
 ### 关键优先级
 
 - NotebookLM / Gemini 精确域名位于通用 Google 之前，防止 AI 流量被 Google 组提前接管
-- `google-cn` 位于通用 Google 之前
 - `apple@cn` 位于通用 Apple 之前
 - `microsoft@cn` 位于通用 Microsoft 之前
 - 中国域名位于 `geolocation-!cn` 之前
@@ -293,15 +292,15 @@ Bettbox 中关闭某个服务开关后：
 
 - 对应策略组从最终配置中移除
 - 原本指向该组的域名 / IP 规则自动改为 `国外流量`
-- Google / Apple / Microsoft 中国区仍保持 `DIRECT`
+- Apple 中国区 / Microsoft 中国区仍保持 `DIRECT`
 
 ---
 
 ## Rule Providers
 
-脚本当前定义 **23 个** `SKULL_*` Rule Providers，均来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)，使用 `.mrs` 格式并通过 jsDelivr 拉取，默认更新间隔 `86400s`。
+脚本当前定义 **22 个** `SKULL_*` Rule Providers，均来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)，使用 `.mrs` 格式并通过 jsDelivr 拉取，默认更新间隔 `86400s`。
 
-### 域名规则（17 个）
+### 域名规则（16 个）
 
 ```text
 private
@@ -310,7 +309,6 @@ geolocation-!cn
 openai
 anthropic
 google-gemini
-google-cn
 google
 github
 microsoft
@@ -364,13 +362,12 @@ fake-ip-filter-mode: blacklist
 | --- | --- | --- |
 | Bootstrap | `223.5.5.5` / `119.29.29.29` | 本地 |
 | 默认 / 国外域名 | Cloudflare DoH / Google DoH | `#国外流量` |
-| 中国域名 / LAN / Google CN / Apple CN / Microsoft CN | AliDNS DoH / DNSPod DoH | `#DIRECT` |
+| 中国域名 / LAN / Apple CN / Microsoft CN | AliDNS DoH / DNSPod DoH | `#DIRECT` |
 | `direct-nameserver` | AliDNS DoH / DNSPod DoH | `DIRECT` |
 | 代理节点域名 | AliDNS DoH / DNSPod DoH | `DIRECT` |
 
 设计目的：
 
-- Clash Verge Rev 仅继承订阅原有的 `fake-ip-filter`，不继承 `fallback` / `fallback-filter` / `proxy-server-nameserver-policy` 等可能改变查询路径的旧 DNS 字段
 - 国外业务 DNS 查询随代理出口发送，减少直接暴露给本地网络
 - 中国业务使用国内 DNS，保持 CDN / GeoDNS 结果
 - 用户将普通国际服务手动切到 `DIRECT` 时，可使用独立 `direct-nameserver`，避免仍依赖境外代理 DNS
@@ -411,8 +408,7 @@ fake-ip-filter-mode: blacklist
 
 - 重复名称：跳过重复项
 - 旧组与订阅节点重名：改用 `__SKULL_OLD__...` 作为隐藏组保留
-- 依赖成环、指向已关闭的 Bettbox 脚本组或可确定不存在的目标：切断该引用并替换为 `REJECT`
-- 存在动态 `proxy-provider`、脚本阶段无法确认某个引用是否为 provider 节点时：保留原引用并输出告警，交由 Mihomo 最终校验
+- 依赖成环或指向不存在的目标：切断该引用并替换为 `REJECT`
 - provider 显式关闭 `health-check`：遵循原设置，不改写
 
 > 之所以不抛错：Bettbox 的 `handleEvaluate` 在脚本抛错时会丢弃全部产出、回退到**未覆写的原配置**，用户只得到一个错误提示条，实际拿到的是机场裸配置而非"部分生效"的脚本。就地降级至少能保证策略组与规则结构完好。
@@ -449,7 +445,7 @@ Netflix
 
 | 操作 | 结果 |
 | --- | --- |
-| 关闭某服务 | 删除对应服务组，相关规则回落 `国外流量`；listener / tunnel 等若仍指向该已关闭脚本组且无旧组依赖可保留，则改写为 `REJECT` |
+| 关闭某服务 | 删除对应服务组，相关规则回落 `国外流量` |
 | 关闭 `地区分组` | 同时删除 9 个地区聚合组和 9 个隐藏自动测速组，并清理其他组中的地区引用 |
 | 保持默认 | 与 Clash Verge Rev 使用相同的主分流逻辑 |
 
@@ -459,7 +455,7 @@ Netflix
 
 | 项目 | Clash Verge Rev | Bettbox |
 | --- | --- | --- |
-| 核心策略组 / 规则 / Rule Providers | 33 / 29 / 23 | 默认 33 / 29 / 23，可被开关裁剪 |
+| 核心策略组 / 规则 / Rule Providers | 33 / 28 / 22 | 默认 33 / 28 / 22，可被开关裁剪 |
 | 地区自动测速组 | 9 个，全部隐藏 | 9 个，全部隐藏 |
 | 自动测速间隔 | 600s | 600s |
 | 节点自然排序 | 纯 JS 实现，避免依赖 `Intl` | 同一套纯 JS 实现，兼容 QuickJS |
@@ -547,7 +543,7 @@ ChatGPT → 美国聚合
 
 ### 国内流量
 
-LAN、中国大陆域名、中国区 Google / Apple / Microsoft 以及最终命中的中国 IP 均直接 `DIRECT`，不会经过可手动切换的代理组。
+LAN、中国大陆域名、中国区 Apple、中国区 Microsoft 以及最终命中的中国 IP 均直接 `DIRECT`，不会经过可手动切换的代理组。
 
 ### Bettbox 关闭 Netflix 分流
 
