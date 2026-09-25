@@ -3,7 +3,7 @@
 const Compatible_With_Bettbox = { ruleOptionsEnable: true };
 
 // Bettbox v1.18.8+ 可视化覆写开关；关闭服务组后对应规则回落到“国外流量”。
-// 中国区 Google / Apple / Microsoft 保持前置直连，不受服务组开关影响。
+// 中国区 Apple / Microsoft 保持前置直连，不受服务组开关影响。
 var ruleOptionsEnable = {
   ChatGPT: true,
   Claude: true,
@@ -36,8 +36,7 @@ var serviceConfigs = [
 ];
 
 // Bettbox Android 全局覆写脚本
-// Version: 2026.09.25-r1
-// Requires: Mihomo >= 1.19.27 (uses empty-fallback)
+// Version: 2026.09.23-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：设置 -> 高级设置 -> 脚本；配置 -> 订阅 -> 覆写 -> 脚本。
 
@@ -531,11 +530,6 @@ function main(config) {
       return group;
     });
 
-  // 依赖解析必须基于“开关裁剪后的实际组”，否则 listener/tunnel 等可能继续引用已删除组。
-  const activeGroupNames = new Set(
-    config["proxy-groups"].map((group) => group.name)
-  );
-
   // ---------- 5. Rule Providers ----------
   const customRuleProviders = {
     SKULL_Lan: domainProvider("private.mrs"),
@@ -546,7 +540,6 @@ function main(config) {
     SKULL_Claude: domainProvider("anthropic.mrs"),
     SKULL_Gemini: domainProvider("google-gemini.mrs"),
 
-    SKULL_GoogleCN: domainProvider("google-cn.mrs"),
     SKULL_Google: domainProvider("google.mrs"),
     SKULL_GitHub: domainProvider("github.mrs"),
     SKULL_Microsoft: domainProvider("microsoft.mrs"),
@@ -574,8 +567,7 @@ function main(config) {
   // 仅保留节点、provider 等显式引用的旧组及其传递依赖。
   // 同名旧组使用稳定别名，避免覆盖脚本主组；辅助组隐藏，不加入 AI 选项。
   const preserveDependencies = () => {
-    const reservedNames = new Set(reservedGroupNames);
-    const newNames = new Set(activeGroupNames);
+    const newNames = new Set(reservedGroupNames);
     const builtins = new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE", "GLOBAL"]);
     const nodes = new Map();
     for (const proxy of config.proxies || []) {
@@ -584,7 +576,7 @@ function main(config) {
         report(`订阅中存在重复节点名「${proxy.name}」，已跳过重复项`);
         continue;
       }
-      if (reservedNames.has(proxy.name) || builtins.has(proxy.name)) {
+      if (newNames.has(proxy.name) || builtins.has(proxy.name)) {
         report(
           `节点名「${proxy.name}」与内置策略或脚本策略组重名，已跳过该节点的依赖重写，建议在订阅端改名`
         );
@@ -618,12 +610,11 @@ function main(config) {
       }
       old.set(group.name, group);
     }
-    const used = new Set([...reservedNames, ...nodes.keys(), ...old.keys(), ...providerNames]);
+    const used = new Set([...newNames, ...nodes.keys(), ...old.keys(), ...providerNames]);
     const renamed = new Map();
     const aliases = new Set();
     const visiting = new Set();
     const retained = [];
-    const unresolvedDynamicRefs = new Set();
 
     const resolve = (name) => {
       if (typeof name !== "string" || !name || builtins.has(name)) return name;
@@ -638,7 +629,7 @@ function main(config) {
       if (old.has(name)) {
         visiting.add(name);
         let alias = name;
-        if (reservedNames.has(name)) {
+        if (newNames.has(name)) {
           alias = `__SKULL_DEP__${name}`;
           while (used.has(alias)) alias = `_${alias}`;
         }
@@ -667,21 +658,7 @@ function main(config) {
       }
       // 脚本自建的策略组名本身是合法引用目标（listeners / tunnels / ntp / rule-provider
       // 都可能指向它），必须放行；provider 动态节点在扩展脚本阶段无法枚举，也只能放行。
-      if (newNames.has(name)) return name;
-      if (disabledGroupNames[name]) {
-        report(`代理依赖指向已关闭的 Bettbox 策略组「${name}」，已替换为 REJECT`);
-        return "REJECT";
-      }
-      if (providerCount > 0) {
-        if (!unresolvedDynamicRefs.has(name)) {
-          unresolvedDynamicRefs.add(name);
-          report(
-            `代理依赖「${name}」无法在扩展脚本阶段确认：当前存在动态 proxy-provider，` +
-              `已保留原引用；若内核提示 unknown proxy，请检查 provider 节点名或旧组依赖`
-          );
-        }
-        return name;
-      }
+      if (newNames.has(name) || providerCount > 0) return name;
       report(`代理依赖不存在：${name}，已替换为 REJECT`);
       return "REJECT";
     };
@@ -724,8 +701,7 @@ function main(config) {
     `RULE-SET,SKULL_Claude,${serviceTarget("Claude")}`,
     `RULE-SET,SKULL_Gemini,${serviceTarget("Gemini / NotebookLM")}`,
 
-    // 中国区 Google / Apple / Microsoft 优先直连，不受对应服务组开关影响。
-    "RULE-SET,SKULL_GoogleCN,DIRECT",
+    // 中国区 Apple / Microsoft 优先直连，不受对应服务组开关影响。
     "RULE-SET,SKULL_AppleCN,DIRECT",
     "RULE-SET,SKULL_MicrosoftCN,DIRECT",
 
@@ -810,7 +786,6 @@ function main(config) {
     "nameserver-policy": {
       "rule-set:SKULL_China": [...DOMESTIC_DNS],
       "rule-set:SKULL_Lan": [...DOMESTIC_DNS],
-      "rule-set:SKULL_GoogleCN": [...DOMESTIC_DNS],
       "rule-set:SKULL_AppleCN": [...DOMESTIC_DNS],
       "rule-set:SKULL_MicrosoftCN": [...DOMESTIC_DNS]
     },
