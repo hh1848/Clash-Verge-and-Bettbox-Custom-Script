@@ -3,7 +3,7 @@
 const Compatible_With_Bettbox = { ruleOptionsEnable: true };
 
 // Bettbox v1.18.8+ 可视化覆写开关；关闭服务组后对应规则回落到“国外流量”。
-// 中国区 Apple / Microsoft 保持前置直连，不受服务组开关影响。
+// 中国区 Google / Apple / Microsoft 保持前置直连，不受服务组开关影响。
 var ruleOptionsEnable = {
   ChatGPT: true,
   Claude: true,
@@ -724,7 +724,7 @@ function main(config) {
     `RULE-SET,SKULL_Claude,${serviceTarget("Claude")}`,
     `RULE-SET,SKULL_Gemini,${serviceTarget("Gemini / NotebookLM")}`,
 
-    // 中国区 Apple / Microsoft 优先直连，不受对应服务组开关影响。
+    // 中国区 Google / Apple / Microsoft 优先直连，不受对应服务组开关影响。
     "RULE-SET,SKULL_GoogleCN,DIRECT",
     "RULE-SET,SKULL_AppleCN,DIRECT",
     "RULE-SET,SKULL_MicrosoftCN,DIRECT",
