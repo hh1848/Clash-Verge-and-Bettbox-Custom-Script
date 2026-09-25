@@ -1,5 +1,6 @@
 // Clash Verge Rev 全局扩展脚本
-// Version: 2026.09.23-r1
+// Version: 2026.09.25-r1
+// Requires: Mihomo >= 1.19.27 (uses empty-fallback)
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
@@ -463,6 +464,7 @@ function main(config, profileName) {
     SKULL_Claude: domainProvider("anthropic.mrs"),
     SKULL_Gemini: domainProvider("google-gemini.mrs"),
 
+    SKULL_GoogleCN: domainProvider("google-cn.mrs"),
     SKULL_Google: domainProvider("google.mrs"),
     SKULL_GitHub: domainProvider("github.mrs"),
     SKULL_Microsoft: domainProvider("microsoft.mrs"),
@@ -538,6 +540,7 @@ function main(config, profileName) {
     const aliases = new Set();
     const visiting = new Set();
     const retained = [];
+    const unresolvedDynamicRefs = new Set();
 
     const resolve = (name) => {
       if (typeof name !== "string" || !name || builtins.has(name)) return name;
@@ -581,7 +584,17 @@ function main(config, profileName) {
       }
       // 脚本自建的策略组名本身是合法引用目标（listeners / ntp / rule-provider 都可能指向它），
       // 必须放行；provider 动态节点在扩展脚本阶段无法枚举，也只能放行。
-      if (newNames.has(name) || providerCount > 0) return name;
+      if (newNames.has(name)) return name;
+      if (providerCount > 0) {
+        if (!unresolvedDynamicRefs.has(name)) {
+          unresolvedDynamicRefs.add(name);
+          report(
+            `代理依赖「${name}」无法在扩展脚本阶段确认：当前存在动态 proxy-provider，` +
+              `已保留原引用；若内核提示 unknown proxy，请检查 provider 节点名或旧组依赖`
+          );
+        }
+        return name;
+      }
       report(`代理依赖不存在：${name}，已替换为 REJECT`);
       return "REJECT";
     };
@@ -625,6 +638,7 @@ function main(config, profileName) {
     "RULE-SET,SKULL_Gemini,Gemini / NotebookLM",
 
     // 中国区 Apple 必须在通用 Apple 前直连
+    "RULE-SET,SKULL_GoogleCN,DIRECT",
     "RULE-SET,SKULL_AppleCN,DIRECT",
     "RULE-SET,SKULL_MicrosoftCN,DIRECT",
 
@@ -661,9 +675,9 @@ function main(config, profileName) {
   // ---------- 7. DNS ----------
   // DNS 关键行为由脚本明确控制；国内域名使用国内 DNS 直连，其余域名使用境外 DNS 并经“国外流量”发送。
   //
-  // 关于与客户端的关系：脚本执行后，客户端会把自己的 DNS 覆写设置 extend 到这段配置上
-  // （同名键以客户端为准）。所以这里采用“浅合并 + 覆盖式写入”，既保证脚本的键优先，
-  // 又不会在客户端未开启 DNS 覆写时把订阅自带的 dns 细节（fallback 等）整段丢掉。
+  // 仅继承订阅已有的 fake-ip-filter；不继承 fallback / fallback-filter /
+  // proxy-server-nameserver-policy 等会改变查询路径的字段，避免机场 DNS 绕过脚本策略。
+  // Clash Verge Rev 客户端自身的权威 DNS 覆写若启用，仍可能在脚本之后覆盖同名键。
   const oldDns =
     config.dns && typeof config.dns === "object" && !Array.isArray(config.dns)
       ? config.dns
@@ -674,8 +688,6 @@ function main(config, profileName) {
     "https://doh.pub/dns-query#DIRECT"
   ];
   config.dns = {
-    ...oldDns,
-
     enable: true,
     ipv6: false,
     "prefer-h3": false,
@@ -717,6 +729,7 @@ function main(config, profileName) {
     "nameserver-policy": {
       "rule-set:SKULL_China": [...DOMESTIC_DNS],
       "rule-set:SKULL_Lan": [...DOMESTIC_DNS],
+      "rule-set:SKULL_GoogleCN": [...DOMESTIC_DNS],
       "rule-set:SKULL_AppleCN": [...DOMESTIC_DNS],
       "rule-set:SKULL_MicrosoftCN": [...DOMESTIC_DNS]
     },
