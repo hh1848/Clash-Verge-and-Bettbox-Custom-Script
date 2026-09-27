@@ -1,5 +1,5 @@
 // Clash Verge Rev 全局扩展脚本
-// Version: 2026.09.23-r1
+// Version: 2026.09.27-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
@@ -311,6 +311,10 @@ function main(config, profileName) {
 
   const IP_BASE = `${RULESET_HOST}@${RULESET_REF}/geo/geoip/`;
 
+  // Rule Provider 属于境外资源，显式经“国外流量”下载，避免更新规则集时出现额外直连路径。
+  // 若代理暂时不可用，Mihomo 会继续使用本地已缓存的规则集；首次运行仍需至少一个可用代理节点。
+  const RULESET_DOWNLOAD_PROXY = "国外流量";
+
   const domainProvider = (file) => ({
     type: "http",
     behavior: "domain",
@@ -318,6 +322,7 @@ function main(config, profileName) {
     path: `./ruleset/skull/${file}`,
     url: DOMAIN_BASE + file,
     interval: RULE_INTERVAL,
+    proxy: RULESET_DOWNLOAD_PROXY,
     "size-limit": RULE_SET_SIZE_LIMIT
   });
 
@@ -328,6 +333,7 @@ function main(config, profileName) {
     path: `./ruleset/skull/ip-${file}`,
     url: IP_BASE + file,
     interval: RULE_INTERVAL,
+    proxy: RULESET_DOWNLOAD_PROXY,
     "size-limit": RULE_SET_SIZE_LIMIT
   });
 
@@ -659,11 +665,13 @@ function main(config, profileName) {
   ];
 
   // ---------- 7. DNS ----------
-  // DNS 关键行为由脚本明确控制；国内域名使用国内 DNS 直连，其余域名使用境外 DNS 并经“国外流量”发送。
+  // DNS 关键行为由脚本明确控制：国内公网域名使用国内 DoH 直连，LAN/私有域名使用系统 DNS，
+  // 其余域名使用境外 DoH；AI 域名的 DNS 查询跟随各自 AI 策略组出口。
   //
-  // 关于与客户端的关系：脚本执行后，客户端会把自己的 DNS 覆写设置 extend 到这段配置上
-  // （同名键以客户端为准）。所以这里采用“浅合并 + 覆盖式写入”，既保证脚本的键优先，
-  // 又不会在客户端未开启 DNS 覆写时把订阅自带的 dns 细节（fallback 等）整段丢掉。
+  // 只继承订阅原有的 fake-ip-filter，不继承 fallback / fallback-filter /
+  // proxy-server-nameserver-policy / nameserver 等会额外改变查询路径的字段，
+  // 避免机场 DNS 配置绕过脚本的分流与隐私策略。
+  // Clash Verge Rev 客户端若启用了自身的 DNS 覆写，仍可能在脚本执行后覆盖同名键。
   const oldDns =
     config.dns && typeof config.dns === "object" && !Array.isArray(config.dns)
       ? config.dns
@@ -673,9 +681,13 @@ function main(config, profileName) {
     "https://dns.alidns.com/dns-query#DIRECT",
     "https://doh.pub/dns-query#DIRECT"
   ];
-  config.dns = {
-    ...oldDns,
+  const LAN_DNS = ["system"];
+  const proxyDns = (group) => [
+    `https://1.1.1.1/dns-query#${group}`,
+    `https://8.8.8.8/dns-query#${group}`
+  ];
 
+  config.dns = {
     enable: true,
     ipv6: false,
     "prefer-h3": false,
@@ -713,10 +725,15 @@ function main(config, profileName) {
       "https://8.8.8.8/dns-query#国外流量"
     ],
 
-    // 国内域名：仅使用国内 DoH，并明确直连，保持国内 CDN / GeoDNS 结果。
+    // AI 域名的 DNS 与业务流量使用相同策略组，减少 DNS 出口与业务出口不一致。
+    // LAN/私有域名交给系统 DNS，避免 NAS、路由器、校园网内部域名被送往公网 DNS。
+    // 国内公网域名仍使用国内 DoH，以保持 CDN / GeoDNS 结果。
     "nameserver-policy": {
+      "rule-set:SKULL_OpenAI": proxyDns("ChatGPT"),
+      "rule-set:SKULL_Claude": proxyDns("Claude"),
+      "rule-set:SKULL_Gemini": proxyDns("Gemini / NotebookLM"),
+      "rule-set:SKULL_Lan": [...LAN_DNS],
       "rule-set:SKULL_China": [...DOMESTIC_DNS],
-      "rule-set:SKULL_Lan": [...DOMESTIC_DNS],
       "rule-set:SKULL_AppleCN": [...DOMESTIC_DNS],
       "rule-set:SKULL_MicrosoftCN": [...DOMESTIC_DNS]
     },
