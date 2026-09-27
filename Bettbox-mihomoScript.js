@@ -36,7 +36,7 @@ var serviceConfigs = [
 ];
 
 // Bettbox Android 全局覆写脚本
-// Version: 2026.09.23-r1
+// Version: 2026.09.27-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：设置 -> 高级设置 -> 脚本；配置 -> 订阅 -> 覆写 -> 脚本。
 
@@ -329,6 +329,10 @@ function main(config) {
   // 分流不会因此中断（匹配不到的规则集返回 false 并继续匹配后续规则），但该条规则会失效。
   const RULESET_SIZE_LIMIT = 16 * 1024 * 1024;
 
+  // Rule Provider 属于境外资源，显式经“国外流量”下载，避免规则更新形成额外直连路径。
+  // 若代理暂时不可用，Mihomo 会继续使用本地已缓存规则；首次运行仍需至少一个可用代理节点。
+  const RULESET_DOWNLOAD_PROXY = "国外流量";
+
   const domainProvider = (file) => ({
     type: "http",
     behavior: "domain",
@@ -336,6 +340,7 @@ function main(config) {
     path: `./ruleset/skull/${file}`,
     url: DOMAIN_BASE + file,
     interval: RULE_INTERVAL,
+    proxy: RULESET_DOWNLOAD_PROXY,
     "size-limit": RULESET_SIZE_LIMIT
   });
 
@@ -346,6 +351,7 @@ function main(config) {
     path: `./ruleset/skull/ip-${file}`,
     url: IP_BASE + file,
     interval: RULE_INTERVAL,
+    proxy: RULESET_DOWNLOAD_PROXY,
     "size-limit": RULESET_SIZE_LIMIT
   });
 
@@ -530,6 +536,11 @@ function main(config) {
       return group;
     });
 
+  // 依赖解析必须以开关裁剪后的实际策略组为准；reservedGroupNames 只负责名称保留/冲突检测。
+  const activeGroupNames = new Set(
+    config["proxy-groups"].map((group) => group.name)
+  );
+
   // ---------- 5. Rule Providers ----------
   const customRuleProviders = {
     SKULL_Lan: domainProvider("private.mrs"),
@@ -567,7 +578,8 @@ function main(config) {
   // 仅保留节点、provider 等显式引用的旧组及其传递依赖。
   // 同名旧组使用稳定别名，避免覆盖脚本主组；辅助组隐藏，不加入 AI 选项。
   const preserveDependencies = () => {
-    const newNames = new Set(reservedGroupNames);
+    const reservedNames = new Set(reservedGroupNames);
+    const newNames = new Set(activeGroupNames);
     const builtins = new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE", "GLOBAL"]);
     const nodes = new Map();
     for (const proxy of config.proxies || []) {
@@ -576,7 +588,7 @@ function main(config) {
         report(`订阅中存在重复节点名「${proxy.name}」，已跳过重复项`);
         continue;
       }
-      if (newNames.has(proxy.name) || builtins.has(proxy.name)) {
+      if (reservedNames.has(proxy.name) || builtins.has(proxy.name)) {
         report(
           `节点名「${proxy.name}」与内置策略或脚本策略组重名，已跳过该节点的依赖重写，建议在订阅端改名`
         );
@@ -610,11 +622,12 @@ function main(config) {
       }
       old.set(group.name, group);
     }
-    const used = new Set([...newNames, ...nodes.keys(), ...old.keys(), ...providerNames]);
+    const used = new Set([...reservedNames, ...nodes.keys(), ...old.keys(), ...providerNames]);
     const renamed = new Map();
     const aliases = new Set();
     const visiting = new Set();
     const retained = [];
+    const unresolvedDynamicRefs = new Set();
 
     const resolve = (name) => {
       if (typeof name !== "string" || !name || builtins.has(name)) return name;
@@ -629,7 +642,7 @@ function main(config) {
       if (old.has(name)) {
         visiting.add(name);
         let alias = name;
-        if (newNames.has(name)) {
+        if (reservedNames.has(name)) {
           alias = `__SKULL_DEP__${name}`;
           while (used.has(alias)) alias = `_${alias}`;
         }
@@ -656,9 +669,27 @@ function main(config) {
         visiting.delete(name);
         return name;
       }
-      // 脚本自建的策略组名本身是合法引用目标（listeners / tunnels / ntp / rule-provider
-      // 都可能指向它），必须放行；provider 动态节点在扩展脚本阶段无法枚举，也只能放行。
-      if (newNames.has(name) || providerCount > 0) return name;
+      // 仅实际仍存在的脚本策略组可以直接放行。
+      if (newNames.has(name)) return name;
+
+      // Bettbox 开关已删除的脚本组不能继续作为 listener / tunnel / rule-provider 等依赖目标。
+      if (disabledGroupNames[name]) {
+        report(`代理依赖指向已关闭的 Bettbox 策略组「${name}」，已替换为 REJECT`);
+        return "REJECT";
+      }
+
+      // provider 动态节点在脚本阶段无法枚举：保留引用交由 Mihomo 最终校验，但只告警一次。
+      if (providerCount > 0) {
+        if (!unresolvedDynamicRefs.has(name)) {
+          unresolvedDynamicRefs.add(name);
+          report(
+            `代理依赖「${name}」无法在扩展脚本阶段确认：当前存在动态 proxy-provider，` +
+              `已保留原引用；若内核提示 unknown proxy，请检查 provider 节点名或旧组依赖`
+          );
+        }
+        return name;
+      }
+
       report(`代理依赖不存在：${name}，已替换为 REJECT`);
       return "REJECT";
     };
@@ -746,9 +777,19 @@ function main(config) {
   //   但只要用户在 App 里打开了「DNS 覆写」，本段仍会被整体替换掉
   //   （nameserver / nameserver-policy / direct-nameserver / proxy-server-nameserver 全部失效）。
   //   要使用本脚本的 DNS 策略，请在 App 中关闭 DNS 覆写。
+  const oldDns =
+    config.dns && typeof config.dns === "object" && !Array.isArray(config.dns)
+      ? config.dns
+      : {};
+
   const DOMESTIC_DNS = [
     "https://dns.alidns.com/dns-query#DIRECT",
     "https://doh.pub/dns-query#DIRECT"
+  ];
+  const LAN_DNS = ["system"];
+  const proxyDns = (group) => [
+    `https://1.1.1.1/dns-query#${group}`,
+    `https://8.8.8.8/dns-query#${group}`
   ];
 
   config.dns = {
@@ -761,14 +802,20 @@ function main(config) {
     "fake-ip-range": "198.18.0.1/16",
     "fake-ip-filter-mode": "blacklist",
 
+    // 只继承订阅已有的 fake-ip-filter；不继承 nameserver / fallback /
+    // fallback-filter / nameserver-policy 等可能改变查询路径的 DNS 字段。
     "fake-ip-filter": [
-      "*.lan",
-      "*.local",
-      "localhost.ptlogin2.qq.com",
-      "time.*.com",
-      "time.*.gov",
-      "time.*.edu.cn",
-      "ntp.*.com"
+      ...new Set([
+        ...(Array.isArray(oldDns["fake-ip-filter"]) ? oldDns["fake-ip-filter"] : []),
+        "*.lan",
+        "*.local",
+        "localhost.ptlogin2.qq.com",
+        "time.*.com",
+        "time.*.gov",
+        "time.*.edu.cn",
+        "ntp.*.com",
+        "+.pool.ntp.org"
+      ])
     ],
 
     // 仅用于 DNS 上游域名 bootstrap。
@@ -784,15 +831,21 @@ function main(config) {
     ],
 
     "nameserver-policy": {
+      // AI DNS 与业务流量使用同一个服务策略；服务开关关闭时自动回落“国外流量”。
+      "rule-set:SKULL_OpenAI": proxyDns(serviceTarget("ChatGPT")),
+      "rule-set:SKULL_Claude": proxyDns(serviceTarget("Claude")),
+      "rule-set:SKULL_Gemini": proxyDns(serviceTarget("Gemini / NotebookLM")),
+
+      // LAN / 私有域名使用 Android 系统 DNS；国内公网域名继续使用国内 DoH。
+      "rule-set:SKULL_Lan": [...LAN_DNS],
       "rule-set:SKULL_China": [...DOMESTIC_DNS],
-      "rule-set:SKULL_Lan": [...DOMESTIC_DNS],
       "rule-set:SKULL_AppleCN": [...DOMESTIC_DNS],
       "rule-set:SKULL_MicrosoftCN": [...DOMESTIC_DNS]
     },
 
-    // 已确定 DIRECT 的域名连接独立解析，减少对代理链路的依赖。
+    // DIRECT 出口默认仍使用国内 DoH；开启 follow-policy 后，LAN 等明确策略可覆盖它。
     "direct-nameserver": [...DOMESTIC_DNS],
-    "direct-nameserver-follow-policy": false,
+    "direct-nameserver-follow-policy": true,
 
     // 节点域名独立直连解析，避免依赖尚未建立的代理连接。
     "proxy-server-nameserver": [...DOMESTIC_DNS]
