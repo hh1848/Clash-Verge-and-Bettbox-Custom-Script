@@ -23,7 +23,7 @@
 
 因此更换机场后，可以继续使用同一套代理组结构和分流逻辑。脚本中**不需要填写机场 URL**，也不包含任何节点信息。
 
-当前脚本版本：Clash Verge Rev 为 **`2026.09.28-r2`**，Bettbox 为 **`2026.09.27-r1`**。
+当前脚本版本：Clash Verge Rev 为 **`2026.09.28-r3`**，Bettbox 为 **`2026.09.27-r1`**。
 
 ### 当前设计重点
 
@@ -160,7 +160,7 @@ Apple 中国区、Microsoft 中国区由前置规则直接 `DIRECT`。
 
 ### 游戏平台（仅 Clash Verge Rev）
 
-`游戏平台` 组覆盖 Steam、Epic Games、Battle.net（Blizzard）、EA、Ubisoft、Riot 和 Xbox 的域名规则。默认第一项为 `DIRECT`，避免游戏更新默认消耗代理流量；需要代理访问商店或登录时，可手动选自动节点、地区节点。
+`游戏平台` 组覆盖 Steam、Epic Games、Battle.net（Blizzard）、EA、Ubisoft、Riot 和 Xbox 的域名规则。选项按其他服务组的顺序展示：自动选择、全球手动、各地区聚合组、`DIRECT`；通过 `default-selected: DIRECT` 保持首次使用默认直连，避免游戏更新默认消耗代理流量。已有手动选择由 `profile.store-selected` 保留。
 
 `category-games@cn` 和 `category-game-platforms-download@cn` 先于游戏平台规则直连，涵盖国内游戏平台域名及已收录的国内下载 CDN。此组是域名分流；未知下载域名或直连 IP 不保证命中，下载前建议在 Clash Verge Rev 的连接页面检查实际策略。
 
