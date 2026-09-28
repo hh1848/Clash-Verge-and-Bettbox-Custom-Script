@@ -1,5 +1,5 @@
 // Clash Verge Rev 全局扩展脚本
-// Version: 2026.09.27-r1
+// Version: 2026.09.28-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
@@ -139,6 +139,8 @@ function main(config, profileName) {
       "https://fastly.jsdelivr.net/gh/0xWans/Qure@master/IconSet/Color/YouTube.png",
     netflix:
       "https://fastly.jsdelivr.net/gh/0xWans/Qure@master/IconSet/Color/Netflix.png",
+    steam:
+      "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Steam.png",
 
     hk: "https://flagcdn.com/w160/hk.png",
     mo: "https://flagcdn.com/w160/mo.png",
@@ -435,6 +437,7 @@ function main(config, profileName) {
     select("X", ICON.x, SERVICE_OPTIONS),
     select("YouTube", ICON.youtube, SERVICE_OPTIONS),
     select("Netflix", ICON.netflix, SERVICE_OPTIONS),
+    select("Steam", ICON.steam, SERVICE_OPTIONS),
 
     // 4. 地区聚合：聚合组 = 地区自动测速 + 该地区全部节点
     regionAggregate("香港聚合", "香港自动", ICON.hk, FILTER.hk, REGION_EXCLUDE.hk),
@@ -479,6 +482,8 @@ function main(config, profileName) {
     SKULL_X: domainProvider("x.mrs"),
     SKULL_YouTube: domainProvider("youtube.mrs"),
     SKULL_Netflix: domainProvider("netflix.mrs"),
+    SKULL_SteamCN: domainProvider("steam@cn.mrs"),
+    SKULL_Steam: domainProvider("steam.mrs"),
 
     SKULL_LanIP: ipProvider("private.mrs"),
     SKULL_ChinaIP: ipProvider("cn.mrs"),
@@ -633,6 +638,8 @@ function main(config, profileName) {
     // 中国区 Apple 必须在通用 Apple 前直连
     "RULE-SET,SKULL_AppleCN,DIRECT",
     "RULE-SET,SKULL_MicrosoftCN,DIRECT",
+    // Steam 中国区/CDN 优先直连，其余 Steam 域名由独立策略组控制。
+    "RULE-SET,SKULL_SteamCN,DIRECT",
 
     // 常用国际服务
     "RULE-SET,SKULL_YouTube,YouTube",
@@ -643,6 +650,7 @@ function main(config, profileName) {
     "RULE-SET,SKULL_Telegram,Telegram",
     "RULE-SET,SKULL_X,X",
     "RULE-SET,SKULL_Netflix,Netflix",
+    "RULE-SET,SKULL_Steam,Steam",
 
     // 中国大陆域名优先直连
     "RULE-SET,SKULL_China,DIRECT",
@@ -735,7 +743,8 @@ function main(config, profileName) {
       "rule-set:SKULL_Lan": [...LAN_DNS],
       "rule-set:SKULL_China": [...DOMESTIC_DNS],
       "rule-set:SKULL_AppleCN": [...DOMESTIC_DNS],
-      "rule-set:SKULL_MicrosoftCN": [...DOMESTIC_DNS]
+      "rule-set:SKULL_MicrosoftCN": [...DOMESTIC_DNS],
+      "rule-set:SKULL_SteamCN": [...DOMESTIC_DNS]
     },
 
     // 已判定为 DIRECT 的域名连接独立解析，避免手选直连后仍依赖国外 DNS 出口。
