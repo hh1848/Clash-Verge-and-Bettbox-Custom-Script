@@ -2,71 +2,68 @@
 
 # Clash Verge Rev & Bettbox Custom Script
 
-**一套 Mihomo 覆写脚本，让你更换机场时无需重新整理代理组、规则和 DNS。**
+**保留机场节点，统一重建策略组、分流规则与 DNS。换机场，不换使用习惯。**
 
 [![Clash Verge Rev](https://img.shields.io/badge/Clash%20Verge%20Rev-支持-2f81f7)](./Clash-Verge-Rev-mihomoScript.js)
-[![Bettbox](https://img.shields.io/badge/Bettbox%20(Android)-支持-3ddc84)](./Bettbox-mihomoScript.js)
+[![Bettbox](https://img.shields.io/badge/Bettbox%20(Android)-v1.18.8%2B-3ddc84)](./Bettbox-mihomoScript.js)
 [![Mihomo](https://img.shields.io/badge/内核-Mihomo-orange)](https://github.com/MetaCubeX/mihomo)
 
 </div>
 
 > [!IMPORTANT]
-> 本仓库只提供 Mihomo 配置覆写脚本，**不提供任何代理节点、机场订阅、网络接入或售卖服务**。
-
----
+> 本仓库只提供 **Mihomo 配置覆写脚本**，不提供任何代理节点、机场订阅、网络接入或相关售卖服务。
 
 ## 项目简介
 
-不同机场订阅通常自带不同的代理组、规则和 DNS 配置。本项目采用统一覆写方式：
+不同机场订阅通常自带不同的代理组、规则和 DNS。更换订阅后，使用习惯也可能随之改变。
 
-> **保留当前订阅中的 `proxies` / `proxy-providers` 节点，在此基础上重建主策略组、分流规则、Rule Providers 和 DNS；若节点或 provider 仍依赖原订阅中的旧策略组，则只保留必要依赖并自动隐藏。**
+本项目把“节点来源”和“配置逻辑”拆开：
 
-因此更换机场后，可以继续使用同一套代理组结构和分流逻辑。脚本中**不需要填写机场 URL**，也不包含任何节点信息。
+> **订阅负责提供节点，脚本负责决定这些节点如何被组织和使用。**
 
-当前脚本版本：Clash Verge Rev 为 **`2026.09.28-r3`**，Bettbox 为 **`2026.09.27-r1`**。
+脚本会保留订阅中的 `proxies` / `proxy-providers`，在此基础上统一重建主策略组、分流规则、Rule Providers 与 DNS。若节点或 provider 仍依赖原订阅中的旧策略组，只保留实际需要的依赖并自动隐藏。
 
-### 当前设计重点
+因此，正常更换机场时无需修改脚本，也无需重新整理整套代理组。
 
-- 国内流量优先 `DIRECT`，一般国外域名交给 `国外流量`；Clash Verge Rev 的游戏平台按独立组处理
-- ChatGPT / Claude / Gemini & NotebookLM 独立分流，**AI 组不提供任何 DIRECT 路径**
-- Google / GitHub / Microsoft / Apple / Telegram / X / YouTube / Netflix 独立分流；Clash Verge Rev 另有默认直连的 `游戏平台` 组
-- Apple 中国区与 Microsoft 中国区规则前置直连
-- 8 个主要地区 + `其他地区`，采用“**地区聚合组 + 隐藏自动测速子组**”结构
-- `全球手动` 自动过滤机场公告、流量提示等伪节点，并按地区 + 数字自然排序
-- 自动补全 `proxy-providers` 的 health-check，尽量保留机场原有测速参数
-- 国内 DNS 直连，国外 DNS 固定经 `国外流量` 发送，并提供独立 `direct-nameserver`
-- Bettbox v1.18.8+ 支持 12 个可视化覆写开关
+### 主要特性
 
----
+- **固定策略组结构**：`全球手动`、`自动选择`、`国外流量`、`漏网之鱼` + 独立服务组 + 地区聚合组。
+- **AI 强制代理路径**：ChatGPT、Claude、Gemini / NotebookLM 不提供 `DIRECT`，也不经过可切换到直连的上级组。
+- **常用服务独立分流**：Google、GitHub、Microsoft、Apple、Telegram、X、YouTube、Netflix；Clash Verge Rev 额外提供游戏平台分流。
+- **地区聚合 + 自动测速**：香港、澳门、台湾、新加坡、韩国、日本、美国、欧洲、其他地区。
+- **节点清洗与自然排序**：过滤公告、到期时间、剩余流量等伪节点；内联节点按地区 + 数字自然顺序排列。
+- **国内外 DNS 分流**：国内业务使用国内 DNS，国外业务 DNS 随 `国外流量` 出口发送，并提供独立 `direct-nameserver`。
+- **订阅依赖兼容**：保留仍被节点、provider、listener、tunnel、NTP 等引用的必要旧策略组。
+- **Bettbox 可视化开关**：v1.18.8+ 可按服务或地区分组启用 / 关闭覆写。
 
-## 适用环境
+## 快速开始
 
 | 客户端 | 平台 | 脚本 | 说明 |
 | --- | --- | --- | --- |
-| **Clash Verge Rev** | Windows / macOS / Linux | [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) | 桌面版，补充 TUN 路由与 DNS 劫持参数 |
-| **Bettbox**（v1.18.8+） | Android | [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) | Android 版，支持可视化覆写开关，不接管 App 的 TUN/VPN 生命周期 |
+| **Clash Verge Rev** | Windows / macOS / Linux | [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) | 桌面版；包含游戏平台分流，并补充 TUN / DNS 劫持缺失项 |
+| **Bettbox v1.18.8+** | Android | [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) | 支持 12 个可视化覆写开关；不接管 App 的 TUN / VPN 生命周期 |
 
-必须使用 **Mihomo 内核**以及支持 `include-all`、`exclude-type`、Rule Providers、`.mrs` 等相关特性的客户端。
-
----
-
-## 安装与配置
+> [!NOTE]
+> 需要使用 **Mihomo 内核**，并要求客户端支持 `include-all`、`exclude-type`、Rule Providers、`.mrs` 等相关特性。
 
 ### Clash Verge Rev
 
-1. 正常导入机场订阅
-2. 打开 `订阅` → **全局扩展脚本**（Script，不是 Merge 覆写）
-3. 将 [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) 全文复制进去并保存
-4. 刷新订阅
-5. 代理页出现 `全球手动`、`自动选择`、`国外流量`、`漏网之鱼`、各服务组和地区聚合组，即表示脚本已执行
+1. 正常导入机场订阅。
+2. 打开 `订阅` → **全局扩展脚本**。
+3. 将 [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) 全文复制进去并保存。**这里使用 Script，不是 Merge 覆写。**
+4. 刷新订阅 / 重新加载配置。
+5. 代理页出现 `全球手动`、`自动选择`、`国外流量`、`漏网之鱼`、服务组和地区聚合组，即表示脚本已执行。
 
 ### Bettbox
 
-1. 正常导入机场订阅
-2. 在脚本覆写入口新建 JavaScript 覆写（具体入口以 App 当前版本为准）
-3. 将 [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) 全文复制保存并关联当前订阅
-4. 刷新订阅
-5. Bettbox v1.18.8+ 会读取脚本顶部声明的 12 个覆写开关
+1. 正常导入机场订阅。
+2. 在当前订阅的覆写设置中新增 JavaScript 脚本覆写。
+3. 将 [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) 全文复制保存并关联当前订阅。
+4. 刷新订阅 / 重新应用配置。
+5. Bettbox v1.18.8+ 会读取脚本顶部配置并显示 12 个可视化覆写开关。
+
+> [!WARNING]
+> 如果需要使用本脚本的 DNS 设计，请在 Bettbox 中关闭 **DNS 覆写**。Bettbox 的 DNS 覆写会在脚本执行后整体替换 `dns`，从而清空脚本生成的 `nameserver-policy`。
 
 ### Raw 地址
 
@@ -75,68 +72,32 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
 https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/main/Bettbox-mihomoScript.js
 ```
 
-> Raw 地址用于查看或同步脚本源码，**不是机场订阅地址**。
+> Raw 地址用于查看或同步脚本源码，**不是机场订阅地址**。脚本版本以对应文件头部的 `Version:` 为准。
 
----
+## 效果预览
 
-## 工作原理
+<p align="center">
+  <img src="./assets/effect-preview.webp" alt="脚本效果预览" width="900">
+</p>
 
-```text
-机场订阅
-   ├── proxies ─────────────┐
-   └── proxy-providers ─────┤  ← 节点 / provider 保留
-                            ▼
-                     自定义覆写脚本
-                            │
-        ┌───────────────────┼───────────────────┐
-        ▼                   ▼                   ▼
-  proxy-groups            rules          rule-providers
-  CVR: 34 组 / 37 条 / 31 个
-  25 可见 + 9 隐藏                         │
-        │                                  │
-        └────────────── DNS ───────────────┘
-                 Fake-IP + 国内外分流
-                            │
-                            ▼
-                     最终 Mihomo 配置
-```
+## 策略组设计
 
-> Clash Verge Rev 脚本自身定义 34 个策略组，Bettbox 定义 33 个。若订阅节点、provider、listener、tunnel、NTP 或 Rule Provider 仍引用旧策略组，脚本会额外保留必要旧组并设置为隐藏，因此最终组数可能更高。
-
-### 默认配置规模
-
-| 项目 | Clash Verge Rev | Bettbox（全部开关启用） |
-| --- | ---: | ---: |
-| 脚本定义策略组 | **34** | **33** |
-| 主界面可见组 | **25** | **24** |
-| 隐藏地区测速组 | **9** | **9** |
-| 分流规则 | **37** | **28** |
-| Rule Providers | **31** | **22** |
-
-Bettbox 关闭服务或地区开关后，对应组会动态减少。
-
----
-
-## 代理组架构
-
-### 基础组（4 个）
+### 基础组
 
 | 代理组 | 类型 | 用途 |
 | --- | --- | --- |
-| `全球手动` | `select` | 手动选择节点；过滤伪节点；内联节点按地区和数字自然排序 |
-| `自动选择` | `url-test` | 全节点自动测速，默认 `600s`、容差 `80ms`、Lazy 模式 |
-| `国外流量` | `select` | 一般国外流量的统一出口，只允许代理路径 |
-| `漏网之鱼` | `select` | 最终 `MATCH` 落点，默认首选 `国外流量`，同时保留手动 `DIRECT` 兜底 |
+| `全球手动` | `select` | 手动选择全部有效节点；过滤伪节点并对内联节点进行地区 + 数字自然排序 |
+| `自动选择` | `url-test` | 全节点自动测速，默认间隔 `600s`、容差 `80ms`、Lazy 模式 |
+| `国外流量` | `select` | 一般国外流量的统一代理出口，不提供 `DIRECT` |
+| `漏网之鱼` | `select` | 最终 `MATCH` 落点；默认使用 `国外流量`，保留手动 `DIRECT` 兜底 |
 
-国内流量不经过额外的“国内直连”策略组：命中相关规则后直接落到 `DIRECT`。
+中国大陆流量不经过额外“国内直连”策略组：命中中国域名 / IP 规则后直接落到 `DIRECT`。
 
-### AI 组（3 个）
+### AI 组
 
-- `ChatGPT`
-- `Claude`
-- `Gemini / NotebookLM`
+`ChatGPT` · `Claude` · `Gemini / NotebookLM`
 
-AI 组选项仅包含：
+AI 组只允许：
 
 ```text
 自动选择
@@ -144,81 +105,77 @@ AI 组选项仅包含：
 各地区聚合组
 ```
 
-**不包含 `DIRECT`，也不引用任何可以再切换到 `DIRECT` 的上级策略组。** 这样可避免 AI 服务因持久化选择或上级组设置而间接直连。
+它们既不包含 `DIRECT`，也不引用可以再切换到 `DIRECT` 的上级策略组，避免 AI 服务因持久化选择或上级组设置而间接直连。
 
-### 常用国际服务（8 个）
+### 常用国际服务
 
 `Google` · `GitHub` · `Microsoft` · `Apple` · `Telegram` · `X` · `YouTube` · `Netflix`
 
-这些服务组允许：
+这些组可选择：
 
 ```text
 自动选择 / 全球手动 / 各地区聚合组 / DIRECT
 ```
 
-Apple 中国区、Microsoft 中国区由前置规则直接 `DIRECT`。
+`apple@cn` 与 `microsoft@cn` 会在对应通用服务规则之前直接 `DIRECT`。
 
 ### 游戏平台（仅 Clash Verge Rev）
 
-`游戏平台` 组覆盖 Steam、Epic Games、Battle.net（Blizzard）、EA、Ubisoft、Riot 和 Xbox 的域名规则。选项按其他服务组的顺序展示：自动选择、全球手动、各地区聚合组、`DIRECT`；通过 `default-selected: DIRECT` 保持首次使用默认直连，避免游戏更新默认消耗代理流量。已有手动选择由 `profile.store-selected` 保留。
+`游戏平台` 覆盖 Steam、Epic Games、Battle.net / Blizzard、EA、Ubisoft、Riot 和 Xbox。组内同样提供自动选择、全球手动、地区聚合与 `DIRECT`，首次使用默认 `DIRECT`，避免游戏更新默认消耗代理流量。
 
-`category-games@cn` 和 `category-game-platforms-download@cn` 先于游戏平台规则直连，涵盖国内游戏平台域名及已收录的国内下载 CDN。此组是域名分流；未知下载域名或直连 IP 不保证命中，下载前建议在 Clash Verge Rev 的连接页面检查实际策略。
+`category-games@cn` 与 `category-game-platforms-download@cn` 会先于游戏平台通用规则直连。该功能主要基于域名规则，未知下载域名或直接连接 IP 不保证命中，下载前可在 Clash Verge Rev 的连接页面检查实际策略。
 
-### 地区聚合组（9 个，可见）
+### 地区聚合
+
+默认顺序：
 
 ```text
-香港聚合
-澳门聚合
-台湾聚合
-新加坡聚合
-韩国聚合
-日本聚合
-美国聚合
-欧洲聚合
-其他地区
+香港 → 澳门 → 台湾 → 新加坡 → 韩国 → 日本 → 美国 → 欧洲 → 其他
 ```
 
-每个地区聚合组都是 `select`：
+每个地区使用“可见聚合组 + 隐藏自动测速组”的两层结构：
 
 ```text
-地区聚合
-├── 地区自动        ← 隐藏 url-test 子组，默认第一项
-├── 该地区节点 01
-├── 该地区节点 02
+美国聚合
+├── 美国自动        ← hidden: true，url-test
+├── 美国节点 01
+├── 美国节点 02
 └── ...
 ```
 
-这样主界面只展示一个地区入口，同时兼顾自动测速和手动选节点。
+这样主界面只保留一个地区入口，同时兼顾自动测速和手动选节点。
 
-### 隐藏地区自动组（9 个）
+## 默认分流逻辑
 
-`香港自动` · `澳门自动` · `台湾自动` · `新加坡自动` · `韩国自动` · `日本自动` · `美国自动` · `欧洲自动` · `其他自动`
+规则自上而下匹配，命中即停止。整体思路是：**先处理需要精确优先级的服务，再处理中国 / 国外通用规则，最后由 IP 和 `MATCH` 兜底。**
 
-这些组全部设置 `hidden: true`，只供对应地区聚合组调用，不在 Clash Verge Rev / Bettbox 主策略组列表中占用界面空间。
+| 优先级 | 流量类型 | 默认目标 |
+| --- | --- | --- |
+| 1 | LAN / private 域名 | `DIRECT` |
+| 2 | NotebookLM、AI Studio、Gemini API 等精确域名 | `Gemini / NotebookLM` |
+| 3 | OpenAI / Anthropic / Google Gemini | 对应 AI 组 |
+| 4 | Apple CN / Microsoft CN；CVR 国内游戏平台与下载 CDN | `DIRECT` |
+| 5 | CVR 七类游戏平台域名 | `游戏平台` |
+| 6 | Google / GitHub / Microsoft / Apple / Telegram / X / YouTube / Netflix | 对应服务组 |
+| 7 | 中国大陆域名 | `DIRECT` |
+| 8 | `geolocation-!cn` | `国外流量` |
+| 9 | private / Google / Telegram / Twitter / Netflix IP | 对应目标，`no-resolve` |
+| 10 | China IP | `DIRECT` |
+| 最后 | `MATCH` | `漏网之鱼` |
 
----
+关键顺序包括：NotebookLM / Gemini 精确规则位于通用 Google 之前；Apple CN / Microsoft CN 位于对应通用服务规则之前；Clash Verge Rev 的 Xbox 规则位于通用 Microsoft 之前。
+
+### Bettbox 服务开关回落
+
+关闭某个服务后，对应策略组会从最终配置中移除，原本指向该组的域名 / IP 规则自动回落到 `国外流量`。Apple CN 和 Microsoft CN 的前置直连规则保持不变。
 
 ## 节点识别、过滤与排序
 
-### 地区优先级
+地区识别同时支持中文 / 繁体中文、emoji 国旗、英文国家或城市名称，以及常见机场代码和缩写。
 
-当前统一顺序为：
+同一节点名称如果同时命中多个地区，只归入优先级最高的地区，避免重复出现在多个地区组。
 
-**香港 → 澳门 → 台湾 → 新加坡 → 韩国 → 日本 → 美国 → 欧洲 → 其他**
-
-若同一节点名称同时命中多个地区标识，只归入优先级最高的地区，避免一个节点重复出现在多个地区组。
-
-### 识别范围
-
-地区规则同时支持中文、繁体中文、emoji 国旗、英文国家/城市名称、常见机场代码和缩写。
-
-美国识别额外覆盖 Los Angeles、San Jose、Seattle、New York、Phoenix、Salt Lake City、San Francisco、Dallas、Chicago、Las Vegas、Ashburn、Boston、Miami、Denver、Houston、Austin、Washington D.C. 等常见节点名。
-
-欧洲识别覆盖英国、德国、法国、荷兰、西班牙、意大利、瑞士、瑞典、芬兰、挪威、波兰、爱尔兰、奥地利、比利时、捷克、丹麦、葡萄牙、希腊等常见区域标识。
-
-### 伪节点过滤
-
-`全球手动`、`自动选择` 和地区组会排除明显的机场信息节点，例如：
+`全球手动`、`自动选择` 和地区组会过滤明显的信息型伪节点，例如：
 
 ```text
 到期 / 过期 / 剩余流量 / 流量重置 / 套餐信息
@@ -226,18 +183,9 @@ Apple 中国区、Microsoft 中国区由前置规则直接 `DIRECT`。
 Expire / Traffic Remaining / Website ...
 ```
 
-过滤规则刻意避免简单匹配“流量”两个字，以减少误伤“香港01｜不限流量”这类真实节点。
+过滤规则不会简单匹配“流量”二字，减少误伤“香港01｜不限流量”这类真实节点。
 
-### 全球手动排序
-
-对 `config.proxies` 中的内联节点：
-
-1. 过滤 Direct / Pass / Compatible 等绕过型出站
-2. 过滤机场伪节点
-3. 按地区优先级排序
-4. 同一地区内使用纯 JavaScript 数字自然排序
-
-例如：
+对 `config.proxies` 中已经展开的内联节点，`全球手动` 会按地区优先级排序，并在同一区域内使用纯 JavaScript 数字自然排序：
 
 ```text
 香港1
@@ -245,123 +193,42 @@ Expire / Traffic Remaining / Website ...
 香港10
 ```
 
-不会被错误排序成 `1 → 10 → 2`。
+不会被错误排成 `1 → 10 → 2`。
 
-若订阅使用 `proxy-providers`，`全球手动` 通过 `use` 动态引用 provider；provider 内部节点顺序由 Mihomo 运行时管理。
-
----
+若订阅使用 `proxy-providers`，脚本通过 `use` 动态引用 provider。provider 内部节点顺序由 Mihomo 运行时管理，JavaScript 无法提前重排。
 
 ## Proxy Provider Health Check
 
-脚本会遍历现有 `proxy-providers` 并确保 health-check 可用：
+脚本只补齐缺失配置，不无条件覆盖机场原有 health-check：
 
-- 强制 `enable: true`
-- 缺少测速 URL 时使用 `https://www.gstatic.com/generate_204`
-- 缺少 interval 时使用 `600`
-- 缺少 lazy 时使用 `true`
-- 仅当使用默认 `generate_204` 且原配置没有声明状态码时补 `expected-status: 204`
-- **不会覆盖机场已经自定义的 URL / interval / timeout 等有效配置**
+- `health-check.enable` 缺失时补为 `true`；如果机场显式设置为 `false`，保留原值并记录告警。
+- URL 缺失时使用 `https://www.gstatic.com/generate_204`。
+- `interval` 缺失或无效时使用 `600`。
+- `lazy` 缺失时使用 `true`。
+- 仅在使用默认 `generate_204` 且原配置没有声明状态码时补 `expected-status: 204`。
+- 已有 URL、interval、timeout 等有效配置保持不变。
 
-这样 provider 节点参与地区 `url-test` 和全局自动测速时更稳定。
-
----
-
-## 分流规则
-
-Clash Verge Rev 共 **37 条**，Bettbox 共 **28 条**；自上而下匹配，命中即停止。
-
-| 阶段 | 内容 | 目标 | 条数 |
-| --- | --- | --- | ---: |
-| 1 | `private` 局域网域名 | `DIRECT` | 1 |
-| 2 | NotebookLM / AI Studio / Gemini API 精确域名 | `Gemini / NotebookLM` | 5 |
-| 3 | `openai` / `anthropic` / `google-gemini` | 三个 AI 组 | 3 |
-| 4 | `apple@cn` / `microsoft@cn` / 国内游戏平台与下载 CDN（CVR） | `DIRECT` | 4 / 2 |
-| 5 | 七个平台域名规则（CVR） | `游戏平台` | 7 / 0 |
-| 6 | YouTube / Google / GitHub / Microsoft / Apple / Telegram / X / Netflix | 对应服务组 | 8 |
-| 7 | `cn` 中国大陆域名 | `DIRECT` | 1 |
-| 8 | `geolocation-!cn` | `国外流量` | 1 |
-| 9 | private / Google / Telegram / Twitter / Netflix IP | 对应目标，`no-resolve` | 5 |
-| 10 | China IP | `DIRECT`，允许解析 | 1 |
-| 末 | `MATCH` | `漏网之鱼` | 1 |
-|  | **合计（CVR / Bettbox）** |  | **37 / 28** |
-
-### 关键优先级
-
-- NotebookLM / Gemini 精确域名位于通用 Google 之前，防止 AI 流量被 Google 组提前接管
-- `apple@cn` 位于通用 Apple 之前
-- `microsoft@cn` 位于通用 Microsoft 之前
-- Clash Verge Rev 的国内游戏域名及下载 CDN 位于七个平台的通用规则之前；Xbox 位于通用 Microsoft 之前
-- 中国域名位于 `geolocation-!cn` 之前
-- 中国 IP 作为未知域名的最终国内兜底，并允许触发解析
-
-### Bettbox 开关回落
-
-Bettbox 中关闭某个服务开关后：
-
-- 对应策略组从最终配置中移除
-- 原本指向该组的域名 / IP 规则自动改为 `国外流量`
-- Apple 中国区 / Microsoft 中国区仍保持 `DIRECT`
-
----
+这样既能让 provider 节点更稳定地参与 `url-test`，也不会覆盖机场明确关闭健康检查或自定义测速参数的配置。
 
 ## Rule Providers
 
-Clash Verge Rev 定义 **31 个**、Bettbox 定义 **22 个** `SKULL_*` Rule Providers，均来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)，使用 `.mrs` 格式并通过 jsDelivr 拉取，默认更新间隔 `86400s`。
+脚本自身规则集统一使用 `SKULL_*` 命名，来源于 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)，采用 `.mrs` 格式，通过 jsDelivr 获取，默认更新间隔 `86400s`。
 
-### 域名规则（Clash Verge Rev 25 个，Bettbox 16 个）
-
-```text
-private
-cn
-geolocation-!cn
-openai
-anthropic
-google-gemini
-google
-github
-microsoft
-microsoft@cn
-apple@cn
-apple
-telegram
-x
-youtube
-netflix
-category-games@cn（仅 Clash Verge Rev）
-category-game-platforms-download@cn（仅 Clash Verge Rev）
-steam（仅 Clash Verge Rev）
-epicgames（仅 Clash Verge Rev）
-blizzard（仅 Clash Verge Rev）
-ea（仅 Clash Verge Rev）
-ubisoft（仅 Clash Verge Rev）
-riot（仅 Clash Verge Rev）
-xbox（仅 Clash Verge Rev）
-```
-
-### IP 规则（6 个）
-
-```text
-private
-cn
-google
-telegram
-twitter
-netflix
-```
-
-缓存路径统一位于：
+缓存路径：
 
 ```text
 ./ruleset/skull/
 ```
 
-机场原有 `rule-providers` 会被合并保留，以避免其被节点、provider 或其他配置引用时产生依赖断裂；脚本自己的主分流规则只引用 `SKULL_*` 系列。
+机场原有 `rule-providers` 会继续保留，以避免节点、provider 或其他配置仍引用它们时发生依赖断裂；脚本自己的主分流规则只引用 `SKULL_*` 系列。
 
----
+每个 Rule Provider 都设置了 `16 MiB` 的 `size-limit`。正常 `.mrs` 文件远小于该值；如果触发限制，通常意味着上游响应异常或内容被中间设备替换。
+
+规则集默认跟随 `meta-rules-dat` 的 `meta` 分支。若需要固定内容，可将脚本中的 `RULESET_REF` 改为固定 tag 或 commit SHA；修改后应清理一次规则集缓存。
 
 ## DNS 设计
 
-两版脚本均采用：
+两版脚本均使用 Fake-IP，并启用规则感知 DNS：
 
 ```yaml
 enable: true
@@ -373,77 +240,21 @@ fake-ip-range: 198.18.0.1/16
 fake-ip-filter-mode: blacklist
 ```
 
-### DNS 出口
-
 | 用途 | 上游 | 出口 |
 | --- | --- | --- |
 | Bootstrap | `223.5.5.5` / `119.29.29.29` | 本地 |
 | 默认 / 国外域名 | Cloudflare DoH / Google DoH | `#国外流量` |
-| 中国域名 / LAN / Apple CN / Microsoft CN / 国内游戏与下载 CDN（CVR） | AliDNS DoH / DNSPod DoH | `#DIRECT` |
+| 中国域名 / LAN / Apple CN / Microsoft CN / CVR 国内游戏规则 | AliDNS DoH / DNSPod DoH | `#DIRECT` |
 | `direct-nameserver` | AliDNS DoH / DNSPod DoH | `DIRECT` |
 | 代理节点域名 | AliDNS DoH / DNSPod DoH | `DIRECT` |
 
-设计目的：
+设计目的：国外业务 DNS 查询跟随代理出口，国内业务保持本地 GeoDNS / CDN 结果；代理节点域名单独直连解析，避免形成 `nameserver → 国外流量 → 节点域名解析` 的循环依赖。
 
-- 国外业务 DNS 查询随代理出口发送，减少直接暴露给本地网络
-- 中国业务使用国内 DNS，保持 CDN / GeoDNS 结果
-- 用户将普通国际服务手动切到 `DIRECT` 时，可使用独立 `direct-nameserver`，避免仍依赖境外代理 DNS
-- 代理服务器域名独立解析，避免 `nameserver → 国外流量 → 节点域名解析` 形成循环依赖
+Clash Verge Rev 额外加入 Windows / NTP 相关 Fake-IP 排除项，例如 `+.pool.ntp.org`、`+.msftconnecttest.com`、`+.msftncsi.com`。
 
-> **Bettbox 前提**：脚本把 `enable` 显式写成 `true` 是有意为之——客户端的 `patchRawConfig()` 只在 `overrideDns 为真` 或 `dns.enable` 不为 `true` 时，才用 App 内的 DNS 配置**整体替换**整段 `dns` 并清空 `nameserver-policy`。换句话说：**只要在 App 里打开了「DNS 覆写」，本节的所有策略都会失效。** 要使用本脚本的 DNS 设计，请在 App 中关闭 DNS 覆写。
+## Bettbox 可视化覆写
 
-### Fake-IP Filter
-
-两版均包含局域网、时间同步、QQ 登录等基础排除项。Clash Verge Rev 版另外加入：
-
-```text
-+.pool.ntp.org
-+.msftconnecttest.com
-+.msftncsi.com
-```
-
-用于桌面系统的 NTP 与 Windows 网络连通性检测场景。
-
----
-
-## 旧策略组依赖兼容
-
-新版脚本不会无条件保留机场原代理组，但会检查以下对象中的策略组引用：
-
-- 节点 `dialer-proxy`
-- `proxy-providers` 的 `proxy` / `override.dialer-proxy`
-- Rule Providers 的 `proxy`
-- listeners
-- tunnels
-- NTP 的 `dialer-proxy`
-
-只有真正被引用的旧组及其传递依赖会被保留，并统一设置 `hidden: true`。
-
-若旧组名称与脚本主组重名，会使用 `__SKULL_DEP__...` 形式生成隐藏别名，避免覆盖脚本主策略组。
-
-若发现节点／旧组名称冲突、循环依赖或指向不存在目标的引用，脚本会**就地降级并逐条告警**，而不是中断执行：
-
-- 重复名称：跳过重复项
-- 旧组与订阅节点重名：改用 `__SKULL_OLD__...` 作为隐藏组保留
-- 依赖成环或指向不存在的目标：切断该引用并替换为 `REJECT`
-- provider 显式关闭 `health-check`：遵循原设置，不改写
-
-> 之所以不抛错：Bettbox 的 `handleEvaluate` 在脚本抛错时会丢弃全部产出、回退到**未覆写的原配置**，用户只得到一个错误提示条，实际拿到的是机场裸配置而非"部分生效"的脚本。就地降级至少能保证策略组与规则结构完好。
-
-> 降级刻意**不使用 `DIRECT`** 兜底——把未知引用指向直连会造成隐私泄漏，`REJECT` 只影响可用性。
-
-降级原因通过 `console.error` 写入客户端日志（Bettbox 日志面板 / Clash Verge Rev 日志），末尾另有一行 `共 N 处异常已按降级策略处理` 汇总。
-
----
-
-## Bettbox 可视化覆写开关
-
-Bettbox v1.18.8+ 读取：
-
-- `ruleOptionsEnable`
-- `serviceConfigs`
-
-共 12 个开关：
+Bettbox v1.18.8+ 会读取脚本顶部的 `ruleOptionsEnable` 与 `serviceConfigs`，当前提供 12 个开关：
 
 ```text
 ChatGPT
@@ -462,201 +273,124 @@ Netflix
 
 | 操作 | 结果 |
 | --- | --- |
-| 关闭某服务 | 删除对应服务组，相关规则回落 `国外流量` |
-| 关闭 `地区分组` | 同时删除 9 个地区聚合组和 9 个隐藏自动测速组，并清理其他组中的地区引用 |
-| 保持默认 | 与 Clash Verge Rev 使用相同的基础分流逻辑；游戏平台分流仅在 Clash Verge Rev 中提供 |
+| 关闭某服务 | 删除对应服务组，相关规则自动回落到 `国外流量` |
+| 关闭 `地区分组` | 删除 9 个地区聚合组和 9 个隐藏自动测速组，同时清理其他组中的地区引用 |
+| 保持默认 | 使用完整基础分流逻辑；游戏平台分流仍仅在 Clash Verge Rev 中提供 |
 
----
+修改开关后需要重新执行覆写脚本，即刷新 / 重新应用对应订阅配置。
+
+## 旧策略组依赖兼容
+
+脚本不会无条件保留机场原代理组，只检查仍然存在的实际引用：
+
+```text
+节点 dialer-proxy
+proxy-providers 的 proxy / override.dialer-proxy
+Rule Providers 的 proxy
+listeners
+tunnels
+NTP dialer-proxy
+```
+
+只有被引用的旧组及其传递依赖会保留，并统一设置 `hidden: true`。
+
+如果发现旧组与节点重名、循环依赖或引用不存在目标，脚本会就地降级并写入日志，而不是直接抛错中断。无法安全恢复的引用会被切断并替换为 `REJECT`。
+
+这里刻意不使用 `DIRECT` 作为未知引用的兜底，以避免配置异常时意外直连。日志以 `[SKULL]` 前缀输出，并在末尾汇总异常数量。
 
 ## 两版脚本差异
 
 | 项目 | Clash Verge Rev | Bettbox |
 | --- | --- | --- |
-| 核心策略组 / 规则 / Rule Providers | 34 / 37 / 31 | 默认 33 / 28 / 22，可被开关裁剪 |
-| 地区自动测速组 | 9 个，全部隐藏 | 9 个，全部隐藏 |
-| 自动测速间隔 | 600s | 600s |
-| 节点自然排序 | 纯 JS 实现，避免依赖 `Intl` | 同一套纯 JS 实现，兼容 QuickJS |
-| provider 引用 | `use: providerNames` | `use: providerNames` |
-| 可视化开关 | 无 | 12 个 |
-| `find-process-mode` | `strict` | `off` ※ |
-| 顶层 `ipv6` | 不强制覆盖 | `false` ※ |
-| TUN | 在原配置上补充 `mixed`、auto-route、strict-route、auto-detect-interface、DNS hijack；不强制开启 | 不覆写 `config.tun` |
-| Fake-IP Filter | 基础项 + Windows/NTP 额外项 | 基础项 |
+| 平台 | Windows / macOS / Linux | Android |
+| 可视化服务开关 | 无 | 12 个 |
+| 游戏平台独立分流 | 有 | 无 |
+| 地区自动测速组 | 9 个，全部隐藏 | 9 个，全部隐藏；可随“地区分组”开关整体移除 |
+| 节点自然排序 | 纯 JavaScript | 同一套纯 JavaScript，兼容 QuickJS |
+| TUN | 仅在原配置上补缺失项，不强制开启 | 不覆写 `config.tun` |
+| Fake-IP Filter | 基础项 + Windows / NTP 额外项 | 基础项 |
+| 客户端二次改写 | 部分控制面字段可能在脚本后被客户端回写 | 多个核心字段会在脚本后按 App 设置重新写入 |
 
-※ Bettbox 在脚本执行**之后**会无条件改写这些字段（`lib/state.dart` 的 `patchRawConfig`），实际取值由 App 内设置决定。详见下方「常规增强参数」。
+当前 main 的默认规模为：Clash Verge Rev **34 个脚本策略组 / 37 条规则 / 31 个 Rule Providers**；Bettbox 在全部开关启用时为 **33 / 28 / 22**。
 
----
+若订阅存在旧策略组依赖，最终策略组数量可能更高；Bettbox 关闭开关后也会动态减少。
 
-## 常规增强参数
+<details>
+<summary><b>客户端在脚本之后还会改哪些值？</b></summary>
 
 ### Clash Verge Rev
 
-```yaml
-mode: rule
-unified-delay: true
-tcp-concurrent: true
-find-process-mode: strict
-profile:
-  store-selected: true
-  store-fake-ip: true
-```
+脚本会设置常规增强项，例如 `tcp-concurrent: true`、`find-process-mode: strict`、`profile.store-selected: true`、`profile.store-fake-ip: true`。
 
-> `mode` 与 `unified-delay` 属于客户端控制面权威字段（`CONTROL_PLANE_KEYS`），会被 `authoritative.enforce` 在脚本**之后**回写；该键在客户端配置中缺失时甚至会被直接删除。所以实际模式以客户端选择器为准。`tcp-concurrent` / `find-process-mode` 不在该清单内，脚本写入有效。
-
-TUN 会在客户端原配置基础上**补缺失项**：
-
-```yaml
-stack: mixed
-auto-route: true
-auto-detect-interface: true
-strict-route: true
-dns-hijack:
-  - any:53
-  - tcp://any:53
-```
-
-脚本**不会强制开启 TUN**，`enable` 仍服从客户端现有状态。
-
-> 上面这些键都是客户端的 TUN 权威键（`constants::tun::GUI_KEYS`）：只要客户端生成的配置里原本就存在该键，`enforce_tun` 会在脚本**之后**回写覆盖。因此脚本只在键**缺失**时补默认值——无条件硬写既会覆盖用户在 YAML 里显式写的 `false`，多数情况下也是无效动作。
+TUN 只补缺失项：`stack: mixed`、`auto-route`、`auto-detect-interface`、`strict-route` 和 DNS hijack；不会强制开启 TUN。部分客户端控制面字段会在脚本执行后重新回写，因此最终值仍以客户端设置为准。
 
 ### Bettbox
 
-```yaml
-mode: rule
-ipv6: false
-unified-delay: true
-tcp-concurrent: true
-find-process-mode: off
-profile:
-  store-selected: true
-  store-fake-ip: true
-```
+Bettbox 会在脚本执行后按 App 设置重新写入 `mode`、顶层 `ipv6`、`unified-delay`、`tcp-concurrent`、`find-process-mode` 以及 TUN 相关字段。因此这些行为应通过 Bettbox 设置调整，而不是依赖脚本强制覆盖。
 
-> **注意：以上 5 个字段在 Bettbox 上不会生效。** 脚本运行于 `State.patchRawConfig()` 的第 627 行，而客户端在其后（665–679 行）对这 5 个字段**无条件赋值**，取值来自 App 内设置。保留这段代码只为与其他客户端的同源脚本保持结构一致，并作为「不启用客户端覆写」场景的兜底；要改变这些行为请改 App 设置。
->
-> 其中只有 `profile.store-selected` / `store-fake-ip` 是真正生效的——客户端对这两项使用 `== null` 判断，仅补缺失值。
+`profile.store-selected` / `store-fake-ip` 不属于这类无条件覆盖项，脚本写入可生效。
 
-Android 的 TUN / VPN 生命周期交由 Bettbox 自身管理，因此脚本不修改 `config.tun`（客户端同样会无条件写入 TUN 的全部字段，脚本写了也无效）。
+</details>
 
----
-
-## 使用示例
-
-### ChatGPT 固定美国线路
-
-进入：
-
-```text
-ChatGPT → 美国聚合
-```
-
-默认先使用隐藏的 `美国自动` 选择低延迟美国节点；也可以继续进入 `美国聚合` 手动选择具体节点。
-
-### 普通 Apple 国际流量直连
-
-可在 `Apple` 组手动选择 `DIRECT`。由于 DNS 已提供 `direct-nameserver`，直连业务不会继续强依赖 `国外流量` 的境外 DNS 出口。
-
-中国区 Apple 业务由 `apple@cn` 规则提前直接 `DIRECT`，不受 `Apple` 组选择影响。
-
-### 国内流量
-
-LAN、中国大陆域名、中国区 Apple、中国区 Microsoft、Clash Verge Rev 中已收录的国内游戏域名与下载 CDN，以及最终命中的中国 IP 均直接 `DIRECT`，不会经过可手动切换的代理组。
-
-### Bettbox 关闭 Netflix 分流
-
-关闭 `Netflix` 开关后：
-
-```text
-Netflix 组删除
-Netflix 域名规则 → 国外流量
-Netflix IP 规则 → 国外流量
-```
-
-### 更换机场
-
-无需修改脚本。只要新的订阅能正常提供 `proxies` 或 `proxy-providers`，刷新后脚本会重新生成统一结构。
-
----
-
-## 注意事项
+## 常见问题
 
 <details>
 <summary><b>配置里没有任何节点会怎样？</b></summary>
 
-当 `proxies` 和 `proxy-providers` 同时为空时，脚本直接返回原配置，不执行覆写，避免订阅获取失败时破坏配置。
+当 `proxies` 和 `proxy-providers` 同时为空时，脚本直接返回原配置，不执行覆写，避免订阅获取失败时破坏现有配置。
 
 </details>
 
 <details>
-<summary><b>为什么最终策略组数量超过脚本定义数量？</b></summary>
+<summary><b>为什么最终策略组数量比默认值更多？</b></summary>
 
-Clash Verge Rev 自身定义 34 组，Bettbox 自身定义 33 组。若原订阅中的节点、provider、listener、tunnel、NTP 或 Rule Provider 引用了旧策略组，脚本会额外保留必要依赖并隐藏，因此最终数量可能增加。
+若原订阅中的节点、provider、listener、tunnel、NTP 或 Rule Provider 仍引用旧策略组，脚本会额外保留这些必要依赖并隐藏，因此最终数量可能增加。
 
 </details>
 
 <details>
 <summary><b>为什么 provider 节点没有按“全球手动”的地区顺序排列？</b></summary>
 
-JavaScript 排序只能直接处理 `config.proxies` 中已经展开的节点。`proxy-providers` 中的节点由 Mihomo 运行时加载，`全球手动` 通过 `use` 动态引用，provider 内顺序由内核管理。
+脚本只能直接排序 `config.proxies` 中已经展开的内联节点。`proxy-providers` 中的节点由 Mihomo 运行时加载，内部顺序由内核管理。
 
 </details>
 
 <details>
-<summary><b>为什么地区组里还有一个“XX自动”？</b></summary>
+<summary><b>为什么地区聚合组里还有一个“XX自动”？</b></summary>
 
-这是设计行为。可见的地区组是 `select` 聚合组，第一项是隐藏的 `url-test` 自动测速子组，后面才是该地区全部节点，从而同时保留自动和手动两种用法。
+这是设计行为。可见地区组是 `select` 聚合组，第一项是隐藏的 `url-test` 自动测速子组，后面才是该地区具体节点，一个入口即可同时支持自动和手动两种方式。
 
 </details>
 
 <details>
 <summary><b>规则集首次加载失败怎么办？</b></summary>
 
-Rule Providers 通过 jsDelivr 获取 `.mrs` 文件。首次加载需要网络可达；失败时相关流量会继续匹配后续规则或最终进入 `漏网之鱼`，后续按 interval 重新更新。
+Rule Providers 通过 jsDelivr 获取 `.mrs`。首次加载需要网络可达；加载失败时，未命中的流量会继续匹配后续规则或最终进入 `漏网之鱼`，规则集会按更新间隔再次尝试获取。
 
 </details>
 
 <details>
-<summary><b>规则集提示体积超限，或者担心上游内容变化？</b></summary>
+<summary><b>Bettbox 为什么没有使用脚本里的 DNS？</b></summary>
 
-两版脚本都为每个 Rule Provider 设置了 `size-limit`（16 MiB）。超过该体积的响应会被内核拒绝加载，相关流量回落到后续规则——正常 `.mrs` 文件远小于此值，触发通常意味着上游异常或响应被中间设备替换。
-
-另外，规则集 URL 指向 `meta-rules-dat` 的 **`@meta` 可变分支**，上游改动会在下一个 `interval`（86400s）到期时静默生效。需要确定性时，把脚本里的 `RULESET_REF` 改成固定 tag 或 commit SHA 即可——**改完必须清空一次规则集缓存**，否则会继续使用已下载的旧文件。
+检查 App 是否开启了 **DNS 覆写**。开启后，Bettbox 会在脚本执行之后整体替换 `dns`，本脚本生成的 `nameserver-policy` 也会被清空。要使用本项目的 DNS 设计，应关闭 Bettbox DNS 覆写并重新应用配置。
 
 </details>
 
 <details>
 <summary><b>Bettbox 开关修改后为什么没有立即变化？</b></summary>
 
-覆写脚本需要重新执行。修改开关后刷新对应订阅/配置，再检查最终生成的策略组和规则。
+开关只影响下一次脚本执行。修改后刷新 / 重新应用当前订阅，再检查最终生成的代理组和规则。
 
 </details>
-
-<details>
-<summary><b>IPv6 为什么被关闭？</b></summary>
-
-DNS 层两版均设置 `ipv6: false`；Bettbox 另外设置顶层 `ipv6: false`。这是为了避免在无完整 IPv6 代理/路由能力的网络中返回不可用 AAAA 结果。
-
-</details>
-
----
 
 ## 致谢
 
-- [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — Mihomo 内核
-- [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) — GeoSite / GeoIP `.mrs` 规则集
-- [Koolson/Qure](https://github.com/Koolson/Qure) · [0xWans/Qure](https://github.com/0xWans/Qure) · [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) — 图标资源
-
----
+- [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — Mihomo 内核。
+- [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) — GeoSite / GeoIP `.mrs` 规则集。
+- [Koolson/Qure](https://github.com/Koolson/Qure)、[0xWans/Qure](https://github.com/0xWans/Qure)、[lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) — 图标资源。
 
 ## Disclaimer
 
-本项目仅用于 Mihomo 配置研究、学习与个人网络配置管理。
-
-使用者应自行确保：
-
-- 遵守所在国家或地区的法律法规
-- 遵守网络服务提供商及相关平台的服务条款
-- 自行判断第三方 Rule Provider 的可用性与安全性
-- 自行承担配置修改造成的网络异常
+本项目仅用于 Mihomo 配置研究、学习与个人网络配置管理。使用者应遵守所在国家或地区的法律法规、网络服务提供商及相关平台的服务条款，并自行判断第三方 Rule Provider 的可用性与安全性，自行承担配置修改造成的网络异常。
 
 **本项目不提供任何代理节点、机场订阅或相关网络服务。**
