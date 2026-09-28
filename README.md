@@ -91,8 +91,8 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
         ┌───────────────────┼───────────────────┐
         ▼                   ▼                   ▼
   proxy-groups            rules          rule-providers
-  33 个脚本组            28 条              22 个
-  24 可见 + 9 隐藏                         │
+  CVR: 34 组 / 30 条 / 24 个
+  25 可见 + 9 隐藏                         │
         │                                  │
         └────────────── DNS ───────────────┘
                  Fake-IP + 国内外分流
@@ -101,17 +101,17 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
                      最终 Mihomo 配置
 ```
 
-> `33` 是脚本自身定义的策略组数量。若订阅节点、provider、listener、tunnel、NTP 或 Rule Provider 仍引用旧策略组，脚本会额外保留必要旧组并设置为隐藏，因此最终配置中的实际组数可能高于 33。
+> Clash Verge Rev 脚本自身定义 34 个策略组，Bettbox 定义 33 个。若订阅节点、provider、listener、tunnel、NTP 或 Rule Provider 仍引用旧策略组，脚本会额外保留必要旧组并设置为隐藏，因此最终组数可能更高。
 
 ### 默认配置规模
 
 | 项目 | Clash Verge Rev | Bettbox（全部开关启用） |
 | --- | ---: | ---: |
-| 脚本定义策略组 | **33** | **33** |
-| 主界面可见组 | **24** | **24** |
+| 脚本定义策略组 | **34** | **33** |
+| 主界面可见组 | **25** | **24** |
 | 隐藏地区测速组 | **9** | **9** |
-| 分流规则 | **28** | **28** |
-| Rule Providers | **22** | **22** |
+| 分流规则 | **30** | **28** |
+| Rule Providers | **24** | **22** |
 
 Bettbox 关闭服务或地区开关后，对应组会动态减少。
 
@@ -146,9 +146,9 @@ AI 组选项仅包含：
 
 **不包含 `DIRECT`，也不引用任何可以再切换到 `DIRECT` 的上级策略组。** 这样可避免 AI 服务因持久化选择或上级组设置而间接直连。
 
-### 常用国际服务（8 个）
+### 常用国际服务（Clash Verge Rev 9 个，Bettbox 8 个）
 
-`Google` · `GitHub` · `Microsoft` · `Apple` · `Telegram` · `X` · `YouTube` · `Netflix`
+`Google` · `GitHub` · `Microsoft` · `Apple` · `Telegram` · `X` · `YouTube` · `Netflix` · `Steam`（仅 Clash Verge Rev）
 
 这些服务组允许：
 
@@ -156,7 +156,7 @@ AI 组选项仅包含：
 自动选择 / 全球手动 / 各地区聚合组 / DIRECT
 ```
 
-其中 Apple 中国区、Microsoft 中国区由前置规则直接 `DIRECT`，不会被国际服务组抢走。
+其中 Apple 中国区、Microsoft 中国区由前置规则直接 `DIRECT`。Clash Verge Rev 的 `steam@cn` 同样优先直连；其余 Steam 域名进入 `Steam` 组，可手动切换节点或 `DIRECT`。
 
 ### 地区聚合组（9 个，可见）
 
@@ -262,27 +262,28 @@ Expire / Traffic Remaining / Website ...
 
 ## 分流规则
 
-共 **28 条**，自上而下匹配，命中即停止。
+Clash Verge Rev 共 **30 条**，Bettbox 共 **28 条**；自上而下匹配，命中即停止。
 
 | 阶段 | 内容 | 目标 | 条数 |
 | --- | --- | --- | ---: |
 | 1 | `private` 局域网域名 | `DIRECT` | 1 |
 | 2 | NotebookLM / AI Studio / Gemini API 精确域名 | `Gemini / NotebookLM` | 5 |
 | 3 | `openai` / `anthropic` / `google-gemini` | 三个 AI 组 | 3 |
-| 4 | `apple@cn` / `microsoft@cn` | `DIRECT` | 2 |
-| 5 | YouTube / Google / GitHub / Microsoft / Apple / Telegram / X / Netflix | 对应服务组 | 8 |
+| 4 | `apple@cn` / `microsoft@cn` / `steam@cn`（CVR） | `DIRECT` | 3 / 2 |
+| 5 | YouTube / Google / GitHub / Microsoft / Apple / Telegram / X / Netflix / Steam（CVR） | 对应服务组 | 9 / 8 |
 | 6 | `cn` 中国大陆域名 | `DIRECT` | 1 |
 | 7 | `geolocation-!cn` | `国外流量` | 1 |
 | 8 | private / Google / Telegram / Twitter / Netflix IP | 对应目标，`no-resolve` | 5 |
 | 9 | China IP | `DIRECT`，允许解析 | 1 |
 | 末 | `MATCH` | `漏网之鱼` | 1 |
-|  | **合计** |  | **28** |
+|  | **合计（CVR / Bettbox）** |  | **30 / 28** |
 
 ### 关键优先级
 
 - NotebookLM / Gemini 精确域名位于通用 Google 之前，防止 AI 流量被 Google 组提前接管
 - `apple@cn` 位于通用 Apple 之前
 - `microsoft@cn` 位于通用 Microsoft 之前
+- Clash Verge Rev 的 `steam@cn` 位于通用 Steam 之前
 - 中国域名位于 `geolocation-!cn` 之前
 - 中国 IP 作为未知域名的最终国内兜底，并允许触发解析
 
@@ -298,9 +299,9 @@ Bettbox 中关闭某个服务开关后：
 
 ## Rule Providers
 
-脚本当前定义 **22 个** `SKULL_*` Rule Providers，均来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)，使用 `.mrs` 格式并通过 jsDelivr 拉取，默认更新间隔 `86400s`。
+Clash Verge Rev 定义 **24 个**、Bettbox 定义 **22 个** `SKULL_*` Rule Providers，均来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)，使用 `.mrs` 格式并通过 jsDelivr 拉取，默认更新间隔 `86400s`。
 
-### 域名规则（16 个）
+### 域名规则（Clash Verge Rev 18 个，Bettbox 16 个）
 
 ```text
 private
@@ -319,6 +320,8 @@ telegram
 x
 youtube
 netflix
+steam@cn（仅 Clash Verge Rev）
+steam（仅 Clash Verge Rev）
 ```
 
 ### IP 规则（6 个）
@@ -362,7 +365,7 @@ fake-ip-filter-mode: blacklist
 | --- | --- | --- |
 | Bootstrap | `223.5.5.5` / `119.29.29.29` | 本地 |
 | 默认 / 国外域名 | Cloudflare DoH / Google DoH | `#国外流量` |
-| 中国域名 / LAN / Apple CN / Microsoft CN | AliDNS DoH / DNSPod DoH | `#DIRECT` |
+| 中国域名 / LAN / Apple CN / Microsoft CN / Steam CN（CVR） | AliDNS DoH / DNSPod DoH | `#DIRECT` |
 | `direct-nameserver` | AliDNS DoH / DNSPod DoH | `DIRECT` |
 | 代理节点域名 | AliDNS DoH / DNSPod DoH | `DIRECT` |
 
@@ -447,7 +450,7 @@ Netflix
 | --- | --- |
 | 关闭某服务 | 删除对应服务组，相关规则回落 `国外流量` |
 | 关闭 `地区分组` | 同时删除 9 个地区聚合组和 9 个隐藏自动测速组，并清理其他组中的地区引用 |
-| 保持默认 | 与 Clash Verge Rev 使用相同的主分流逻辑 |
+| 保持默认 | 与 Clash Verge Rev 使用相同的基础分流逻辑；Steam 独立分流仅在 Clash Verge Rev 中提供 |
 
 ---
 
@@ -455,7 +458,7 @@ Netflix
 
 | 项目 | Clash Verge Rev | Bettbox |
 | --- | --- | --- |
-| 核心策略组 / 规则 / Rule Providers | 33 / 28 / 22 | 默认 33 / 28 / 22，可被开关裁剪 |
+| 核心策略组 / 规则 / Rule Providers | 34 / 30 / 24 | 默认 33 / 28 / 22，可被开关裁剪 |
 | 地区自动测速组 | 9 个，全部隐藏 | 9 个，全部隐藏 |
 | 自动测速间隔 | 600s | 600s |
 | 节点自然排序 | 纯 JS 实现，避免依赖 `Intl` | 同一套纯 JS 实现，兼容 QuickJS |
@@ -571,9 +574,9 @@ Netflix IP 规则 → 国外流量
 </details>
 
 <details>
-<summary><b>为什么最终策略组数量超过 33？</b></summary>
+<summary><b>为什么最终策略组数量超过脚本定义数量？</b></summary>
 
-33 是脚本自身定义的组数。若原订阅中的节点、provider、listener、tunnel、NTP 或 Rule Provider 引用了旧策略组，脚本会额外保留必要依赖并隐藏，因此最终数量可能增加。
+Clash Verge Rev 自身定义 34 组，Bettbox 自身定义 33 组。若原订阅中的节点、provider、listener、tunnel、NTP 或 Rule Provider 引用了旧策略组，脚本会额外保留必要依赖并隐藏，因此最终数量可能增加。
 
 </details>
 
