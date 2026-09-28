@@ -1,5 +1,5 @@
 // Clash Verge Rev 全局扩展脚本
-// Version: 2026.09.28-r2
+// Version: 2026.09.28-r3
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
@@ -437,8 +437,11 @@ function main(config, profileName) {
     select("X", ICON.x, SERVICE_OPTIONS),
     select("YouTube", ICON.youtube, SERVICE_OPTIONS),
     select("Netflix", ICON.netflix, SERVICE_OPTIONS),
-    // 游戏更新往往体积很大；默认直连，用户可为商店/登录手动切换代理。
-    select("游戏平台", ICON.games, ["DIRECT", ...FOREIGN_OPTIONS]),
+    // 与其他服务组同顺序展示；首次使用仍默认直连，避免游戏更新走代理。
+    {
+      ...select("游戏平台", ICON.games, SERVICE_OPTIONS),
+      "default-selected": "DIRECT"
+    },
 
     // 4. 地区聚合：聚合组 = 地区自动测速 + 该地区全部节点
     regionAggregate("香港聚合", "香港自动", ICON.hk, FILTER.hk, REGION_EXCLUDE.hk),
