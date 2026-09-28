@@ -44,16 +44,6 @@
 | 兼容性 | 自动保留真正被节点、provider、listener、tunnel、NTP 等引用的旧策略组依赖 |
 | Bettbox | v1.18.8+ 提供 12 个可视化覆写开关 |
 
-### 效果预览
-
-<p align="center">
-  <img src="./assets/effect-preview.webp" alt="策略组结构预览" width="900">
-</p>
-
-> 地区聚合组的第一项是隐藏的 `url-test` 自动测速组，后续才是该地区的具体节点，因此一个入口即可兼顾“自动选最快”和“手动指定节点”。
-
----
-
 ## 快速开始
 
 ### 选择对应脚本
