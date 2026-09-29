@@ -1,5 +1,5 @@
 // Clash Verge Rev 全局扩展脚本
-// Version: 2026.09.28-r3
+// Version: 2026.09.29-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
@@ -431,13 +431,19 @@ function main(config, profileName) {
     // 3. 常用国际服务
     select("Google", ICON.google, SERVICE_OPTIONS),
     select("GitHub", ICON.github, SERVICE_OPTIONS),
-    select("Microsoft", ICON.microsoft, SERVICE_OPTIONS),
-    select("Apple", ICON.apple, SERVICE_OPTIONS),
-    select("Telegram", ICON.telegram, SERVICE_OPTIONS),
     select("X", ICON.x, SERVICE_OPTIONS),
     select("YouTube", ICON.youtube, SERVICE_OPTIONS),
     select("Netflix", ICON.netflix, SERVICE_OPTIONS),
-    // 与其他服务组同顺序展示；首次使用仍默认直连，避免游戏更新走代理。
+    select("Telegram", ICON.telegram, SERVICE_OPTIONS),
+    {
+      ...select("Microsoft", ICON.microsoft, SERVICE_OPTIONS),
+      "default-selected": "DIRECT"
+    },
+    {
+      ...select("Apple", ICON.apple, SERVICE_OPTIONS),
+      "default-selected": "DIRECT"
+    },
+    // Microsoft / Apple / 游戏平台首次使用默认直连，仍允许手动切换。
     {
       ...select("游戏平台", ICON.games, SERVICE_OPTIONS),
       "default-selected": "DIRECT"
