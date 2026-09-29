@@ -16,6 +16,7 @@ var ruleOptionsEnable = {
   X: true,
   YouTube: true,
   Netflix: true,
+  "游戏平台": true,
   "地区分组": true
 };
 
@@ -32,11 +33,12 @@ var serviceConfigs = [
   { name: "X", icon: "https://fastly.jsdelivr.net/gh/0xWans/Qure@master/IconSet/Color/Twitter(X).png" },
   { name: "YouTube", icon: "https://fastly.jsdelivr.net/gh/0xWans/Qure@master/IconSet/Color/YouTube.png" },
   { name: "Netflix", icon: "https://fastly.jsdelivr.net/gh/0xWans/Qure@master/IconSet/Color/Netflix.png" },
+  { name: "游戏平台", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Game.png" },
   { name: "地区分组", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/World_Map.png" }
 ];
 
 // Bettbox Android 全局覆写脚本
-// Version: 2026.09.27-r1
+// Version: 2026.09.29-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：设置 -> 高级设置 -> 脚本；配置 -> 订阅 -> 覆写 -> 脚本。
 
@@ -162,6 +164,7 @@ function main(config) {
     x: "https://fastly.jsdelivr.net/gh/0xWans/Qure@master/IconSet/Color/Twitter(X).png",
     youtube: "https://fastly.jsdelivr.net/gh/0xWans/Qure@master/IconSet/Color/YouTube.png",
     netflix: "https://fastly.jsdelivr.net/gh/0xWans/Qure@master/IconSet/Color/Netflix.png",
+    games: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Game.png",
 
     hk: "https://flagcdn.com/w160/hk.png",
     mo: "https://flagcdn.com/w160/mo.png",
@@ -459,12 +462,22 @@ function main(config) {
     // 6. 常用国际服务
     select("Google", ICON.google, SERVICE_OPTIONS),
     select("GitHub", ICON.github, SERVICE_OPTIONS),
-    select("Microsoft", ICON.microsoft, SERVICE_OPTIONS),
-    select("Apple", ICON.apple, SERVICE_OPTIONS),
-    select("Telegram", ICON.telegram, SERVICE_OPTIONS),
     select("X", ICON.x, SERVICE_OPTIONS),
     select("YouTube", ICON.youtube, SERVICE_OPTIONS),
     select("Netflix", ICON.netflix, SERVICE_OPTIONS),
+    select("Telegram", ICON.telegram, SERVICE_OPTIONS),
+    {
+      ...select("Microsoft", ICON.microsoft, SERVICE_OPTIONS),
+      "default-selected": "DIRECT"
+    },
+    {
+      ...select("Apple", ICON.apple, SERVICE_OPTIONS),
+      "default-selected": "DIRECT"
+    },
+    {
+      ...select("游戏平台", ICON.games, SERVICE_OPTIONS),
+      "default-selected": "DIRECT"
+    },
 
     // 7. 地区聚合：自动测速 + 本地区全部节点
     regionAggregate("香港聚合", "香港自动", ICON.hk, FILTER.hk, REGION_EXCLUDE.hk),
@@ -506,7 +519,8 @@ function main(config) {
     "Telegram",
     "X",
     "YouTube",
-    "Netflix"
+    "Netflix",
+    "游戏平台"
   ];
 
   const disabledGroupNames = Object.create(null);
@@ -561,6 +575,15 @@ function main(config) {
     SKULL_X: domainProvider("x.mrs"),
     SKULL_YouTube: domainProvider("youtube.mrs"),
     SKULL_Netflix: domainProvider("netflix.mrs"),
+    SKULL_GamesCN: domainProvider("category-games@cn.mrs"),
+    SKULL_GamesDownloadCN: domainProvider("category-game-platforms-download@cn.mrs"),
+    SKULL_Steam: domainProvider("steam.mrs"),
+    SKULL_Epic: domainProvider("epicgames.mrs"),
+    SKULL_BattleNet: domainProvider("blizzard.mrs"),
+    SKULL_EA: domainProvider("ea.mrs"),
+    SKULL_Ubisoft: domainProvider("ubisoft.mrs"),
+    SKULL_Riot: domainProvider("riot.mrs"),
+    SKULL_Xbox: domainProvider("xbox.mrs"),
 
     SKULL_LanIP: ipProvider("private.mrs"),
     SKULL_ChinaIP: ipProvider("cn.mrs"),
@@ -735,6 +758,18 @@ function main(config) {
     // 中国区 Apple / Microsoft 优先直连，不受对应服务组开关影响。
     "RULE-SET,SKULL_AppleCN,DIRECT",
     "RULE-SET,SKULL_MicrosoftCN,DIRECT",
+    // 国内游戏平台与下载 CDN 优先直连。
+    "RULE-SET,SKULL_GamesCN,DIRECT",
+    "RULE-SET,SKULL_GamesDownloadCN,DIRECT",
+
+    // 游戏平台先于通用服务匹配，Xbox 等流量由独立策略组控制。
+    `RULE-SET,SKULL_Steam,${serviceTarget("游戏平台")}`,
+    `RULE-SET,SKULL_Epic,${serviceTarget("游戏平台")}`,
+    `RULE-SET,SKULL_BattleNet,${serviceTarget("游戏平台")}`,
+    `RULE-SET,SKULL_EA,${serviceTarget("游戏平台")}`,
+    `RULE-SET,SKULL_Ubisoft,${serviceTarget("游戏平台")}`,
+    `RULE-SET,SKULL_Riot,${serviceTarget("游戏平台")}`,
+    `RULE-SET,SKULL_Xbox,${serviceTarget("游戏平台")}`,
 
     // 常用国际服务
     `RULE-SET,SKULL_YouTube,${serviceTarget("YouTube")}`,
