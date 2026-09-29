@@ -35,14 +35,14 @@
 | --- | --- |
 | 国内流量 | 中国大陆域名 / IP 与局域网优先 `DIRECT` |
 | AI 服务 | ChatGPT、Claude、Gemini / NotebookLM 独立分流，**不提供 `DIRECT` 路径** |
-| 常用国际服务 | Google、GitHub、Microsoft、Apple、Telegram、X、YouTube、Netflix 独立策略组 |
-| 游戏平台 | Clash Verge Rev 独立分流，首次默认 `DIRECT` |
+| 常用国际服务 | Google、GitHub、X、YouTube、Netflix、Telegram、Microsoft、Apple 独立策略组；Microsoft / Apple 首次默认 `DIRECT` |
+| 游戏平台 | 两版均独立分流，首次默认 `DIRECT`；Bettbox 可通过可视化开关关闭 |
 | 地区节点 | 香港、澳门、台湾、新加坡、韩国、日本、美国、欧洲、其他地区；同时支持自动测速与手动选择 |
 | 节点整理 | 过滤公告 / 流量提示等伪节点；内联节点按地区 + 数字自然排序 |
 | Provider | 自动补齐缺失的 health-check 参数，同时尊重机场显式关闭的健康检查 |
 | DNS | 国内查询直连；默认国外查询经 `国外流量`；提供独立 `direct-nameserver` |
 | 兼容性 | 自动保留真正被节点、provider、listener、tunnel、NTP 等引用的旧策略组依赖 |
-| Bettbox | v1.18.8+ 提供 12 个可视化覆写开关 |
+| Bettbox | v1.18.8+ 提供 13 个可视化覆写开关 |
 
 ## 快速开始
 
@@ -50,8 +50,8 @@
 
 | 客户端 | 平台 | 当前版本 | 脚本 |
 | --- | --- | --- | --- |
-| **Clash Verge Rev** | Windows / macOS / Linux | `2026.09.28-r3` | [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) |
-| **Bettbox** | Android | `2026.09.27-r1` | [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) |
+| **Clash Verge Rev** | Windows / macOS / Linux | `2026.09.29-r1` | [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) |
+| **Bettbox** | Android | `2026.09.29-r1` | [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) |
 
 > 需要使用 **Mihomo 内核**，并支持 `include-all`、`exclude-type`、Rule Providers、`.mrs` 等相关特性。
 
@@ -70,7 +70,7 @@
 2. 在脚本覆写入口新建 JavaScript 覆写。
 3. 将 [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) 全文复制保存，并关联当前订阅。
 4. 刷新订阅。
-5. Bettbox v1.18.8+ 会读取脚本顶部声明的 12 个覆写开关。
+5. Bettbox v1.18.8+ 会读取脚本顶部声明的 13 个覆写开关。
 
 > [!WARNING]
 > 如果希望使用本脚本定义的完整 DNS 策略，请关闭 Bettbox 自带的 **DNS 覆写**。开启后，App 会在脚本执行之后重新生成 `dns` 配置，脚本中的 `nameserver-policy`、`direct-nameserver` 等设置将被覆盖。
@@ -93,8 +93,8 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
 | LAN / 中国大陆域名与 IP | `DIRECT` | 国内流量不经过额外“国内直连”策略组 |
 | ChatGPT / Claude / Gemini / NotebookLM | 对应 AI 组 | AI 组只提供代理路径 |
 | Apple CN / Microsoft CN | `DIRECT` | 中国区规则优先于通用服务规则 |
-| Google / GitHub / Microsoft / Apple / Telegram / X / YouTube / Netflix | 对应服务组 | 可手动选择自动、地区、具体节点或 `DIRECT` |
-| 游戏平台（仅 CVR） | `游戏平台` | Steam / Epic / Battle.net / EA / Ubisoft / Riot / Xbox；首次默认直连 |
+| Google / GitHub / X / YouTube / Netflix / Telegram / Microsoft / Apple | 对应服务组 | 可手动选择自动、地区、具体节点或 `DIRECT`；Microsoft / Apple 首次默认 `DIRECT` |
+| 游戏平台 | `游戏平台` | 两版均覆盖 Steam / Epic / Battle.net / EA / Ubisoft / Riot / Xbox；首次默认 `DIRECT` |
 | 其他明确国外域名 | `国外流量` | 统一代理出口 |
 | 无法分类的流量 | `漏网之鱼` | 默认走 `国外流量`，保留手动 `DIRECT` 兜底 |
 
@@ -112,7 +112,7 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
         ┌───────────────────┼───────────────────┐
         ▼                   ▼                   ▼
   proxy-groups            rules          rule-providers
-  CVR: 34 组 / 37 条 / 31 个
+  两版: 34 组 / 37 条 / 31 个
   25 可见 + 9 隐藏                         │
         │                                  │
         └────────────── DNS ───────────────┘
@@ -122,23 +122,34 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
                      最终 Mihomo 配置
 ```
 
-> Clash Verge Rev 脚本自身定义 34 个策略组，Bettbox 定义 33 个。若订阅节点、provider、listener、tunnel、NTP 或 Rule Provider 仍引用旧策略组，脚本会额外保留必要旧组并设置为隐藏，因此最终组数可能更高。
+> 两版脚本均定义 34 个策略组。若订阅节点、provider、listener、tunnel、NTP 或 Rule Provider 仍引用旧策略组，脚本会额外保留必要旧组并设置为隐藏，因此最终组数可能更高。
 
 ### 默认配置规模
 
 | 项目 | Clash Verge Rev | Bettbox（全部开关启用） |
 | --- | ---: | ---: |
-| 脚本定义策略组 | **34** | **33** |
-| 主界面可见组 | **25** | **24** |
+| 脚本定义策略组 | **34** | **34** |
+| 主界面可见组 | **25** | **25** |
 | 隐藏地区测速组 | **9** | **9** |
-| 分流规则 | **37** | **28** |
-| Rule Providers | **31** | **22** |
+| 分流规则 | **37** | **37** |
+| Rule Providers | **31** | **31** |
 
 Bettbox 关闭服务或地区开关后，对应组会动态减少。
 
 ---
 
 ## 代理组架构
+
+### 主界面显示顺序（两版一致）
+
+| 顺序 | 策略组 |
+| --- | --- |
+| 01–04 基础 | `全球手动` → `自动选择` → `国外流量` → `漏网之鱼` |
+| 05–07 AI | `ChatGPT` → `Claude` → `Gemini / NotebookLM` |
+| 08–16 服务 | `Google` → `GitHub` → `X` → `YouTube` → `Netflix` → `Telegram` → `Microsoft` → `Apple` → `游戏平台` |
+| 17–25 地区 | `香港聚合` → `澳门聚合` → `台湾聚合` → `新加坡聚合` → `韩国聚合` → `日本聚合` → `美国聚合` → `欧洲聚合` → `其他地区` |
+
+另外还有 9 个隐藏的地区自动测速组。Bettbox 关闭服务或「地区分组」开关后，相应组会从显示列表移除。上述顺序与「国外流量」的职责彼此独立：有专属规则的服务仍由各自策略组控制。
 
 ### 基础组（4 个）
 
@@ -169,7 +180,7 @@ AI 组选项仅包含：
 
 ### 常用国际服务（8 个）
 
-`Google` · `GitHub` · `Microsoft` · `Apple` · `Telegram` · `X` · `YouTube` · `Netflix`
+`Google` · `GitHub` · `X` · `YouTube` · `Netflix` · `Telegram` · `Microsoft` · `Apple`
 
 这些服务组允许：
 
@@ -177,13 +188,13 @@ AI 组选项仅包含：
 自动选择 / 全球手动 / 各地区聚合组 / DIRECT
 ```
 
-Apple 中国区、Microsoft 中国区由前置规则直接 `DIRECT`。
+`Microsoft` 与 `Apple` 首次默认选中 `DIRECT`；已有手动选择由 `profile.store-selected` 保留。Apple 中国区、Microsoft 中国区由前置规则直接 `DIRECT`，不受这两个组的选择影响。
 
-### 游戏平台（仅 Clash Verge Rev）
+### 游戏平台（两版均支持）
 
-`游戏平台` 组覆盖 Steam、Epic Games、Battle.net（Blizzard）、EA、Ubisoft、Riot 和 Xbox 的域名规则。选项按其他服务组的顺序展示：自动选择、全球手动、各地区聚合组、`DIRECT`；通过 `default-selected: DIRECT` 保持首次使用默认直连，避免游戏更新默认消耗代理流量。已有手动选择由 `profile.store-selected` 保留。
+`游戏平台` 组覆盖 Steam、Epic Games、Battle.net（Blizzard）、EA、Ubisoft、Riot 和 Xbox 的域名规则。选项依次是自动选择、全球手动、各地区聚合组、`DIRECT`；通过 `default-selected: DIRECT` 保持首次使用默认直连。已有手动选择由 `profile.store-selected` 保留。Bettbox 可单独关闭「游戏平台」开关，相关国际游戏规则会回落到 `国外流量`。
 
-`category-games@cn` 和 `category-game-platforms-download@cn` 先于游戏平台规则直连，涵盖国内游戏平台域名及已收录的国内下载 CDN。此组是域名分流；未知下载域名或直连 IP 不保证命中，下载前建议在 Clash Verge Rev 的连接页面检查实际策略。
+两版均让 `category-games@cn` 和 `category-game-platforms-download@cn` 先于游戏平台规则直连，涵盖已收录的国内游戏域名及下载 CDN。此组依靠域名规则；未知下载域名或直连 IP 不保证命中，下载前可在客户端连接页面检查实际策略。
 
 ### 地区聚合组（9 个，可见）
 
@@ -289,29 +300,29 @@ Expire / Traffic Remaining / Website ...
 
 ## 分流规则
 
-Clash Verge Rev 共 **37 条**，Bettbox 共 **28 条**；自上而下匹配，命中即停止。
+两版均有 **37 条**分流规则；自上而下匹配，命中即停止。
 
 | 阶段 | 内容 | 目标 | 条数 |
 | --- | --- | --- | ---: |
 | 1 | `private` 局域网域名 | `DIRECT` | 1 |
 | 2 | NotebookLM / AI Studio / Gemini API 精确域名 | `Gemini / NotebookLM` | 5 |
 | 3 | `openai` / `anthropic` / `google-gemini` | 三个 AI 组 | 3 |
-| 4 | `apple@cn` / `microsoft@cn` / 国内游戏平台与下载 CDN（CVR） | `DIRECT` | 4 / 2 |
-| 5 | 七个平台域名规则（CVR） | `游戏平台` | 7 / 0 |
+| 4 | `apple@cn` / `microsoft@cn` / 国内游戏平台与下载 CDN | `DIRECT` | 4 |
+| 5 | 七个平台域名规则 | `游戏平台` | 7 |
 | 6 | YouTube / Google / GitHub / Microsoft / Apple / Telegram / X / Netflix | 对应服务组 | 8 |
 | 7 | `cn` 中国大陆域名 | `DIRECT` | 1 |
 | 8 | `geolocation-!cn` | `国外流量` | 1 |
 | 9 | private / Google / Telegram / Twitter / Netflix IP | 对应目标，`no-resolve` | 5 |
 | 10 | China IP | `DIRECT`，允许解析 | 1 |
 | 末 | `MATCH` | `漏网之鱼` | 1 |
-|  | **合计（CVR / Bettbox）** |  | **37 / 28** |
+|  | **每版合计** |  | **37** |
 
 ### 关键优先级
 
 - NotebookLM / Gemini 精确域名位于通用 Google 之前，防止 AI 流量被 Google 组提前接管
 - `apple@cn` 位于通用 Apple 之前
 - `microsoft@cn` 位于通用 Microsoft 之前
-- Clash Verge Rev 的国内游戏域名及下载 CDN 位于七个平台的通用规则之前；Xbox 位于通用 Microsoft 之前
+- 两版的国内游戏域名及下载 CDN 均位于七个平台的通用规则之前；Xbox 位于通用 Microsoft 之前
 - 中国域名位于 `geolocation-!cn` 之前
 - 中国 IP 作为未知域名的最终国内兜底，并允许触发解析
 
@@ -321,15 +332,15 @@ Bettbox 中关闭某个服务开关后：
 
 - 对应策略组从最终配置中移除
 - 原本指向该组的域名 / IP 规则自动改为 `国外流量`
-- Apple 中国区 / Microsoft 中国区仍保持 `DIRECT`
+- Apple 中国区 / Microsoft 中国区及国内游戏和下载 CDN 规则仍保持 `DIRECT`
 
 ---
 
 ## Rule Providers
 
-Clash Verge Rev 定义 **31 个**、Bettbox 定义 **22 个** `SKULL_*` Rule Providers，均来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)，使用 `.mrs` 格式并通过 jsDelivr 拉取，默认更新间隔 `86400s`。
+两版均定义 **31 个** `SKULL_*` Rule Providers，均来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)，使用 `.mrs` 格式并通过 jsDelivr 拉取，默认更新间隔 `86400s`。
 
-### 域名规则（Clash Verge Rev 25 个，Bettbox 16 个）
+### 域名规则（两版均为 25 个）
 
 ```text
 private
@@ -348,15 +359,15 @@ telegram
 x
 youtube
 netflix
-category-games@cn（仅 Clash Verge Rev）
-category-game-platforms-download@cn（仅 Clash Verge Rev）
-steam（仅 Clash Verge Rev）
-epicgames（仅 Clash Verge Rev）
-blizzard（仅 Clash Verge Rev）
-ea（仅 Clash Verge Rev）
-ubisoft（仅 Clash Verge Rev）
-riot（仅 Clash Verge Rev）
-xbox（仅 Clash Verge Rev）
+category-games@cn
+category-game-platforms-download@cn
+steam
+epicgames
+blizzard
+ea
+ubisoft
+riot
+xbox
 ```
 
 ### IP 规则（6 个）
@@ -400,9 +411,12 @@ fake-ip-filter-mode: blacklist
 | --- | --- | --- |
 | Bootstrap | `223.5.5.5` / `119.29.29.29` | 本地 |
 | 默认 / 国外域名 | Cloudflare DoH / Google DoH | `#国外流量` |
-| 中国域名 / LAN / Apple CN / Microsoft CN / 国内游戏与下载 CDN（CVR） | AliDNS DoH / DNSPod DoH | `#DIRECT` |
+| 中国域名 / LAN / Apple CN / Microsoft CN | AliDNS DoH / DNSPod DoH | `#DIRECT` |
+| 国内游戏与下载 CDN（Clash Verge Rev） | AliDNS DoH / DNSPod DoH | `#DIRECT` |
 | `direct-nameserver` | AliDNS DoH / DNSPod DoH | `DIRECT` |
 | 代理节点域名 | AliDNS DoH / DNSPod DoH | `DIRECT` |
+
+Bettbox 版虽同样让国内游戏与下载 CDN 的**业务规则**直连，但目前没有为这两类域名添加专门的 `nameserver-policy`；其 DNS 查询会按现有 DNS 配置处理。两端网络环境不同，排查游戏更新时可同时检查连接策略与 DNS 查询出口。
 
 设计目的：
 
@@ -464,7 +478,7 @@ Bettbox v1.18.8+ 读取：
 - `ruleOptionsEnable`
 - `serviceConfigs`
 
-共 12 个开关：
+共 13 个开关：
 
 ```text
 ChatGPT
@@ -478,6 +492,7 @@ Telegram
 X
 YouTube
 Netflix
+游戏平台
 地区分组
 ```
 
@@ -485,7 +500,7 @@ Netflix
 | --- | --- |
 | 关闭某服务 | 删除对应服务组，相关规则回落 `国外流量` |
 | 关闭 `地区分组` | 同时删除 9 个地区聚合组和 9 个隐藏自动测速组，并清理其他组中的地区引用 |
-| 保持默认 | 与 Clash Verge Rev 使用相同的基础分流逻辑；游戏平台分流仅在 Clash Verge Rev 中提供 |
+| 保持默认 | 与 Clash Verge Rev 使用相同的策略组顺序和基本分流逻辑，游戏平台组首次默认 `DIRECT` |
 
 ---
 
@@ -493,12 +508,12 @@ Netflix
 
 | 项目 | Clash Verge Rev | Bettbox |
 | --- | --- | --- |
-| 核心策略组 / 规则 / Rule Providers | 34 / 37 / 31 | 默认 33 / 28 / 22，可被开关裁剪 |
+| 核心策略组 / 规则 / Rule Providers | 34 / 37 / 31 | 默认 34 / 37 / 31，组可被开关裁剪 |
 | 地区自动测速组 | 9 个，全部隐藏 | 9 个，全部隐藏 |
 | 自动测速间隔 | 600s | 600s |
 | 节点自然排序 | 纯 JS 实现，避免依赖 `Intl` | 同一套纯 JS 实现，兼容 QuickJS |
 | provider 引用 | `use: providerNames` | `use: providerNames` |
-| 可视化开关 | 无 | 12 个 |
+| 可视化开关 | 无 | 13 个 |
 | `find-process-mode` | `strict` | `off` ※ |
 | 顶层 `ipv6` | 不强制覆盖 | `false` ※ |
 | TUN | 在原配置上补充 `mixed`、auto-route、strict-route、auto-detect-interface、DNS hijack；不强制开启 | 不覆写 `config.tun` |
@@ -573,13 +588,13 @@ ChatGPT → 美国聚合
 
 ### 普通 Apple 国际流量直连
 
-可在 `Apple` 组手动选择 `DIRECT`。由于 DNS 已提供 `direct-nameserver`，直连业务不会继续强依赖 `国外流量` 的境外 DNS 出口。
+`Apple` 组首次默认 `DIRECT`，也可手动切换。由于 DNS 已提供 `direct-nameserver`，直连业务不会继续强依赖 `国外流量` 的境外 DNS 出口。
 
 中国区 Apple 业务由 `apple@cn` 规则提前直接 `DIRECT`，不受 `Apple` 组选择影响。
 
 ### 国内流量
 
-LAN、中国大陆域名、中国区 Apple、中国区 Microsoft、Clash Verge Rev 中已收录的国内游戏域名与下载 CDN，以及最终命中的中国 IP 均直接 `DIRECT`，不会经过可手动切换的代理组。
+LAN、中国大陆域名、中国区 Apple、中国区 Microsoft、两版中已收录的国内游戏域名与下载 CDN，以及最终命中的中国 IP 均直接 `DIRECT`，不会经过可手动切换的代理组。
 
 ### Bettbox 关闭 Netflix 分流
 
@@ -609,7 +624,7 @@ Netflix IP 规则 → 国外流量
 <details>
 <summary><b>为什么最终策略组数量超过脚本定义数量？</b></summary>
 
-Clash Verge Rev 自身定义 34 组，Bettbox 自身定义 33 组。若原订阅中的节点、provider、listener、tunnel、NTP 或 Rule Provider 引用了旧策略组，脚本会额外保留必要依赖并隐藏，因此最终数量可能增加。
+两版脚本均定义 34 组。若原订阅中的节点、provider、listener、tunnel、NTP 或 Rule Provider 引用了旧策略组，脚本会额外保留必要依赖并隐藏，因此最终数量可能增加。
 
 </details>
 
