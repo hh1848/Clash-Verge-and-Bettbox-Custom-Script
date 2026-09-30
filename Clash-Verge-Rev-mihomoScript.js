@@ -1,5 +1,5 @@
 // Clash Verge Rev 全局扩展脚本
-// Version: 2026.09.29-r1
+// Version: 2026.09.30-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：订阅 -> 全局扩展脚本（Script）
 
@@ -242,7 +242,7 @@ function main(config, profileName) {
     return 0;
   };
 
-  const manualProxyNames = Array.isArray(config.proxies)
+  const getManualProxyNames = () => Array.isArray(config.proxies)
     ? config.proxies
         .filter(isProxyCandidate)
         .map((proxy) => proxy && proxy.name)
@@ -257,6 +257,7 @@ function main(config, profileName) {
           return rankDiff !== 0 ? rankDiff : naturalCompare(a, b);
         })
     : [];
+  const manualProxyNames = getManualProxyNames();
 
   // ---------- 3. 工具函数 ----------
   const select = (name, icon, proxies) => ({
@@ -520,21 +521,47 @@ function main(config, profileName) {
   const preserveDependencies = () => {
     const newNames = new Set(config["proxy-groups"].map((group) => group.name));
     const builtins = new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE", "GLOBAL"]);
+    // 别名必须避开全部原名，包括尚未访问的旧组，不能等保留依赖时才检查。
+    const originalProxies = Array.isArray(config.proxies) ? config.proxies : [];
+    const used = new Set([
+      ...newNames, ...builtins, ...providerNames,
+      ...originalProxies.map((proxy) => proxy && proxy.name),
+      ...oldGroups.map((group) => group && group.name)
+    ]);
+    const uniqueAlias = (base) => {
+      let alias = base;
+      while (used.has(alias)) alias = `_${alias}`;
+      used.add(alias);
+      return alias;
+    };
+    const nodeAliases = new Map();
+    const seenNodes = new Set();
     const nodes = new Map();
-    for (const proxy of config.proxies || []) {
+    for (let proxy of originalProxies) {
       if (!proxy || typeof proxy.name !== "string") continue;
-      if (nodes.has(proxy.name)) {
+      if (seenNodes.has(proxy.name)) {
         report(`订阅中存在重复节点名「${proxy.name}」，已跳过重复项`);
         continue;
       }
+      seenNodes.add(proxy.name);
       if (newNames.has(proxy.name) || builtins.has(proxy.name)) {
+        const originalName = proxy.name;
+        const alias = uniqueAlias(`__SKULL_NODE__${originalName}`);
+        nodeAliases.set(originalName, alias);
+        proxy = { ...proxy, name: alias };
         report(
-          `节点名「${proxy.name}」与内置策略或脚本策略组重名，已跳过该节点的依赖重写，建议在订阅端改名`
+          `节点名「${originalName}」与内置策略或脚本策略组重名，已重命名为「${alias}」`
         );
-        continue;
       }
       nodes.set(proxy.name, proxy);
     }
+    if (Array.isArray(config.proxies)) config.proxies = [...nodes.values()];
+    // 初始手动列表生成于名称规范化之前，必须同步实际保留的节点名。
+    const manualGroup = config["proxy-groups"][0];
+    const names = getManualProxyNames();
+    if (names.length > 0) manualGroup.proxies = names;
+    else if (providerCount === 0) manualGroup.proxies = ["REJECT"];
+    else delete manualGroup.proxies;
     const old = new Map();
     // 旧组原名 -> 因与节点重名而改用的别名，供 resolve 与 default-selected 转换。
     const preAlias = new Map();
@@ -551,7 +578,7 @@ function main(config, profileName) {
       }
       if (nodes.has(group.name)) {
         // 旧组与订阅节点重名时无法按原名保留，改用稳定别名并隐藏，避免整套脚本失效。
-        const alias = `__SKULL_OLD__${group.name}`;
+        const alias = uniqueAlias(`__SKULL_OLD__${group.name}`);
         preAlias.set(group.name, alias);
         old.set(alias, { ...group, name: alias, hidden: true });
         report(
@@ -561,7 +588,6 @@ function main(config, profileName) {
       }
       old.set(group.name, group);
     }
-    const used = new Set([...newNames, ...nodes.keys(), ...old.keys(), ...providerNames]);
     const renamed = new Map();
     const aliases = new Set();
     const visiting = new Set();
@@ -571,6 +597,8 @@ function main(config, profileName) {
       if (typeof name !== "string" || !name || builtins.has(name)) return name;
       // 旧组因与节点重名已被改名，引用需要先映射到别名。
       if (preAlias.has(name)) name = preAlias.get(name);
+      // 仅改写原配置的引用；脚本自建规则集的下载策略在下方独立保留。
+      if (!old.has(name) && nodeAliases.has(name)) name = nodeAliases.get(name);
       if (visiting.has(name)) {
         report(`代理依赖存在循环：${name}，已切断该引用`);
         return "REJECT";
@@ -581,17 +609,14 @@ function main(config, profileName) {
         visiting.add(name);
         let alias = name;
         if (newNames.has(name)) {
-          alias = `__SKULL_DEP__${name}`;
-          while (used.has(alias)) alias = `_${alias}`;
+          alias = uniqueAlias(`__SKULL_DEP__${name}`);
         }
         used.add(alias);
         const copy = { ...old.get(name), name: alias, hidden: true };
         if (Array.isArray(copy.proxies)) copy.proxies = copy.proxies.map(resolve);
         // default-selected 失效时由内核回退；只改写实际指向旧组的默认项。
         const defaultSelected = copy["default-selected"];
-        if (typeof defaultSelected === "string" && preAlias.has(defaultSelected)) {
-          copy["default-selected"] = preAlias.get(defaultSelected);
-        } else if (old.has(defaultSelected)) {
+        if (preAlias.has(defaultSelected) || old.has(defaultSelected) || nodeAliases.has(defaultSelected)) {
           copy["default-selected"] = resolve(defaultSelected);
         }
         visiting.delete(name);
@@ -603,7 +628,7 @@ function main(config, profileName) {
       if (nodes.has(name)) {
         visiting.add(name);
         const proxy = nodes.get(name);
-        if (proxy["dialer-proxy"]) proxy["dialer-proxy"] = resolve(proxy["dialer-proxy"]);
+        rewrite(proxy, "dialer-proxy");
         visiting.delete(name);
         return name;
       }
@@ -614,23 +639,88 @@ function main(config, profileName) {
       return "REJECT";
     };
     const rewrite = (object, key) => {
-      if (object && object[key]) object[key] = resolve(object[key]);
+      if (!object || !object[key]) return;
+      const original = object[key];
+      const resolved = resolve(original);
+      // 深层递归可能已把这个字段切成 REJECT，外层不能再写回原来的环。
+      if (object[key] === original) object[key] = resolved;
     };
     for (const proxy of nodes.values()) rewrite(proxy, "dialer-proxy");
     for (const name of providerNames) {
       const provider = providers[name];
       if (!provider || typeof provider !== "object") continue;
       rewrite(provider, "proxy");
+      rewrite(provider, "dialer-proxy");
       rewrite(provider.override, "dialer-proxy");
       for (const proxy of provider.payload || []) rewrite(proxy, "dialer-proxy");
     }
-    for (const provider of Object.values(config["rule-providers"])) rewrite(provider, "proxy");
+    for (const [name, provider] of Object.entries(config["rule-providers"])) {
+      if (!Object.prototype.hasOwnProperty.call(customRuleProviders, name)) rewrite(provider, "proxy");
+    }
     for (const listener of config.listeners || []) rewrite(listener, "proxy");
     for (const tunnel of config.tunnels || []) rewrite(tunnel, "proxy");
     // 内核 RawNTP 里的字段名是 dialer-proxy，不存在 ntp.proxy。
     // 原写法 "proxy" 让这段检查从未生效，而真正需要保护的 dialer-proxy 也没被覆盖到。
     rewrite(config.ntp, "dialer-proxy");
     config["proxy-groups"].push(...retained);
+
+    // 新组的 include-all / 手动节点也可能让 dialer-proxy 回到节点自身。
+    // 包含可见的 provider.payload；远端尚未加载的节点无法在这里枚举。
+    const groups = new Map(config["proxy-groups"].map((group) => [group.name, group]));
+    const regex = (pattern) => new RegExp(String(pattern).replace(/^\(\?i\)/, ""), String(pattern).startsWith("(?i)") ? "i" : "");
+    const matches = (proxy, options) => {
+      try {
+        const match = (pattern) => String(pattern).split("`").some((part) => regex(part).test(proxy.name));
+        const types = String(options["exclude-type"] || "").toLowerCase().split("|");
+        return (!options.filter || match(options.filter)) &&
+          (!options["exclude-filter"] || !match(options["exclude-filter"])) &&
+          !types.includes(String(proxy.type || "").toLowerCase());
+      } catch (_) {
+        // 无法按 JS 正则确认成员时不猜测，避免误切合法线路。
+        return false;
+      }
+    };
+    const visibleNodes = new Map([...nodes].map(([name, proxy]) => [name, { proxy, owner: proxy }]));
+    for (const name of providerNames) {
+      const provider = providers[name];
+      if (!provider || !Array.isArray(provider.payload)) continue;
+      const override = provider.override || {};
+      // 正则改名及表达式覆写由内核执行，脚本无法可靠确定最终名称/依赖。
+      if ((override["proxy-name"] || []).length || (override["override-expr"] || []).length) continue;
+      for (const proxy of provider.payload) {
+        if (!proxy || typeof proxy.name !== "string" || !matches(proxy, provider)) continue;
+        const effective = { ...proxy, name: `${override["additional-prefix"] || ""}${proxy.name}${override["additional-suffix"] || ""}` };
+        const owner = typeof override["dialer-proxy"] === "string" ? override
+          : provider["dialer-proxy"] ? provider : proxy;
+        // provider 节点不属于全局命名空间，独立身份避免与同名组/节点混淆。
+        visibleNodes.set({}, { proxy: effective, owner, providerName: name });
+      }
+    }
+    if (![...visibleNodes.values()].some((entry) => entry.owner["dialer-proxy"])) return;
+    const groupMembers = new Map();
+    for (const group of groups.values()) {
+      const members = Array.isArray(group.proxies) ? [...group.proxies] : [];
+      for (const [id, entry] of visibleNodes) {
+        const included = entry.providerName
+          ? group["include-all"] || group["include-all-providers"] || (group.use || []).includes(entry.providerName)
+          : group["include-all"] || group["include-all-proxies"];
+        if (included && matches(entry.proxy, group)) members.push(id);
+      }
+      groupMembers.set(group.name, members);
+    }
+    const reaches = (name, target, seen = new Set()) => {
+      if (name === target) return true;
+      if (!name || builtins.has(name) || seen.has(name)) return false;
+      seen.add(name);
+      if (visibleNodes.has(name)) return reaches(visibleNodes.get(name).owner["dialer-proxy"], target, seen);
+      return (groupMembers.get(name) || []).some((member) => reaches(member, target, seen));
+    };
+    for (const [id, { proxy, owner }] of visibleNodes) {
+      if (owner["dialer-proxy"] && reaches(owner["dialer-proxy"], id)) {
+        report(`节点「${proxy.name}」经「${owner["dialer-proxy"]}」形成循环，已将 dialer-proxy 替换为 REJECT`);
+        owner["dialer-proxy"] = "REJECT";
+      }
+    }
   };
   preserveDependencies();
 
@@ -702,7 +792,7 @@ function main(config, profileName) {
   // DNS 关键行为由脚本明确控制：国内公网域名使用国内 DoH 直连，LAN/私有域名使用系统 DNS，
   // 其余域名使用境外 DoH；AI 域名的 DNS 查询跟随各自 AI 策略组出口。
   //
-  // 只继承订阅原有的 fake-ip-filter，不继承 fallback / fallback-filter /
+  // 只继承 blacklist 模式的 fake-ip-filter，不继承 fallback / fallback-filter /
   // proxy-server-nameserver-policy / nameserver 等会额外改变查询路径的字段，
   // 避免机场 DNS 配置绕过脚本的分流与隐私策略。
   // Clash Verge Rev 客户端若启用了自身的 DNS 覆写，仍可能在脚本执行后覆盖同名键。
@@ -710,6 +800,14 @@ function main(config, profileName) {
     config.dns && typeof config.dns === "object" && !Array.isArray(config.dns)
       ? config.dns
       : {};
+  const oldFilterMode = oldDns["fake-ip-filter-mode"];
+  const compatibleFilter = oldFilterMode == null || oldFilterMode === "blacklist";
+  const inheritedFilter = compatibleFilter && Array.isArray(oldDns["fake-ip-filter"])
+    ? oldDns["fake-ip-filter"]
+    : [];
+  if (!compatibleFilter && Array.isArray(oldDns["fake-ip-filter"]) && oldDns["fake-ip-filter"].length > 0) {
+    report(`原 DNS fake-ip-filter 使用「${oldFilterMode}」模式，与脚本 blacklist 不兼容；已使用脚本基础排除项`);
+  }
 
   const DOMESTIC_DNS = [
     "https://dns.alidns.com/dns-query#DIRECT",
@@ -733,7 +831,7 @@ function main(config, profileName) {
 
     "fake-ip-filter": [
       ...new Set([
-        ...(Array.isArray(oldDns["fake-ip-filter"]) ? oldDns["fake-ip-filter"] : []),
+        ...inheritedFilter,
         "*.lan",
         "*.local",
         "localhost.ptlogin2.qq.com",
