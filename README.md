@@ -9,8 +9,9 @@
 [![Clash Verge Rev](https://img.shields.io/badge/Clash%20Verge%20Rev-支持-2f81f7)](./Clash-Verge-Rev-mihomoScript.js)
 [![Bettbox](https://img.shields.io/badge/Bettbox%20Android-v1.18.8%2B-3ddc84)](./Bettbox-mihomoScript.js)
 [![Mihomo](https://img.shields.io/badge/内核-Mihomo-orange)](https://github.com/MetaCubeX/mihomo)
+[![Validate scripts](https://github.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/actions/workflows/validate.yml/badge.svg)](https://github.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/actions/workflows/validate.yml)
 
-[快速开始](#快速开始) · [代理组架构](#代理组架构) · [分流规则](#分流规则) · [DNS](#dns-设计) · [客户端差异](#两版脚本差异) · [常见问题](#注意事项)
+[快速开始](#快速开始) · [仓库目录](#仓库目录与日常维护) · [代理组架构](#代理组架构) · [分流规则](#分流规则) · [DNS](#dns-设计) · [客户端差异](#两版脚本差异) · [常见问题](#注意事项)
 
 </div>
 
@@ -43,6 +44,27 @@
 | DNS | 国内查询直连；默认国外查询经 `国外流量`；提供独立 `direct-nameserver` |
 | 兼容性 | 自动保留真正被节点、provider、listener、tunnel、NTP 等引用的旧策略组依赖 |
 | Bettbox | v1.18.8+ 提供 13 个可视化覆写开关 |
+
+## 仓库目录与日常维护
+
+| 目录 / 文件 | 用途 | 日常使用时需要做什么 |
+| --- | --- | --- |
+| [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) | 桌面端覆写入口 | 将全文放入 Clash Verge Rev 全局扩展脚本 |
+| [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) | Android 端覆写入口 | 将全文放入 Bettbox 脚本覆写 |
+| [`rules/`](./rules/) | 自维护的直连、代理与 Fake-IP 补丁 | Mihomo 自动下载；需要修正域名时编辑对应 `.list` 文件 |
+| [`.github/`](./.github/workflows/validate.yml) | GitHub Actions 自动验证配置 | 每次提交自动运行，无需导入客户端 |
+| [`tests/`](./tests/) | 示例订阅与脚本回归测试 | 修改脚本时验证行为，无需导入客户端 |
+
+**普通使用只需复制对应客户端的 JS 脚本。** 三个目录已经随新版发布到 `main`，无需手动下载或放入客户端。`rules/` 会被最终 Mihomo 配置中的 Rule Providers 引用，`.github/` 与 `tests/` 用于仓库维护。
+
+### 什么情况下改哪个文件？
+
+- **确认某个域名应直连，但上游分类有误：** 修改 [`rules/direct.list`](./rules/direct.list)。
+- **确认某个域名应代理，但上游分类遗漏：** 修改 [`rules/proxy.list`](./rules/proxy.list)。
+- **确认某个服务需要真实 IP 才能正常工作：** 修改 [`rules/fake-ip-filter.list`](./rules/fake-ip-filter.list)；这只排除 Fake-IP，不改变直连 / 代理去向。
+- **调整策略组、节点识别或 DNS 逻辑：** 修改对应 JS，并运行 [`自动验证`](#自动验证与维护)。共同逻辑的修改应同步到两端。
+
+域名补丁的[格式与优先级](#自维护补丁3-个)见下文。修改规则文件后，内核默认每 24 小时检查更新，也可在客户端手动更新规则集；修改 JS 后则需重新加载脚本并刷新对应覆写配置。
 
 ## 快速开始
 
@@ -367,7 +389,7 @@ api.example.net
 
 `CustomDirect` / `CustomProxy` 同时接入 DNS policy，分别使用国内 DoH 直连和境外 DoH 经 `国外流量`，并先于通用 CN 分类；AI DNS 仍优先跟随对应 AI 组。
 
-补丁更新只需修改 `rules/*.list`，两份 JS 无需重复修改。提交后等待内核下一轮更新，或在客户端执行规则集更新；**这不是即时推送**。首次使用必须先发布这三个文件到 `main`，再加载新版脚本，否则 Raw 地址返回 404。已有缓存时保留最近成功下载的内容；远端不可达且无缓存时，补丁不能生效。
+补丁更新只需修改 `rules/*.list`，两份 JS 无需重复修改。提交后等待内核下一轮更新，或在客户端执行规则集更新；**这不是即时推送**。本仓库已将三个文件发布到 `main`。如果将脚本迁移到自己的仓库，应同时发布规则文件并修改两份 JS 中的 `CUSTOM_RULE_BASE`；只复制 JS 不会自动改为读取自己的补丁。已有缓存时保留最近成功下载的内容；远端不可达且无缓存时，补丁不能生效。
 
 ### 上游域名规则（两版均为 25 个）
 
