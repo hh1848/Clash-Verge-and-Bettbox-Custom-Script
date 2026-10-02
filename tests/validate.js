@@ -1,0 +1,204 @@
+'use strict';
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const {SCRIPTS, fixture, execute} = require('./helpers');
+const BUILTINS = new Set(['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL']);
+function references(config) {
+  const groups = config['proxy-groups'];
+  const names = groups.map(g => g.name).concat((config.proxies || []).map(p => p.name));
+  assert.equal(new Set(names).size, names.length, 'global names must be unique');
+  const known = new Set([...names, ...BUILTINS]);
+  const providers = config['rule-providers'];
+  const paths = Object.values(providers).map(p => p.path).filter(Boolean);
+  assert.equal(new Set(paths).size, paths.length, 'rule provider cache paths must be unique');
+  for (const group of groups) {
+    for (const ref of group.proxies || []) assert.ok(known.has(ref), `${group.name} -> ${ref}`);
+    for (const ref of group.use || []) assert.ok(config['proxy-providers'][ref], `provider ${ref}`);
+  }
+  for (const proxy of config.proxies || []) {
+    if (proxy['dialer-proxy']) assert.ok(known.has(proxy['dialer-proxy']));
+  }
+  for (const rule of config.rules) {
+    const parts = rule.split(',');
+    if (parts[0] === 'RULE-SET') assert.ok(providers[parts[1]], `RULE-SET ${parts[1]}`);
+    const target = parts[0] === 'MATCH' ? parts[1] : parts[2];
+    assert.ok(known.has(target), `rule target ${target}`);
+  }
+  for (const [name, provider] of Object.entries(providers)) {
+    if (provider.proxy) assert.ok(known.has(provider.proxy), `download proxy ${name}`);
+    if (name.startsWith('SKULL_')) {
+      assert.equal(new URL(provider.url).protocol, 'https:');
+      assert.ok(provider['size-limit'] > 0);
+    }
+  }
+  const dns = config.dns;
+  for (const ref of [...dns['fake-ip-filter'], ...Object.keys(dns['nameserver-policy'])]) {
+    if (ref.startsWith('rule-set:')) {
+      for (const name of ref.slice(9).split(',')) {
+        assert.ok(providers[name], `DNS provider ${name}`);
+        assert.equal(providers[name].behavior, 'domain');
+      }
+    }
+  }
+  for (const urls of [dns.nameserver, ...Object.values(dns['nameserver-policy']), dns['direct-nameserver'], dns['proxy-server-nameserver']]) {
+    for (const url of urls) if (url.includes('#')) assert.ok(known.has(url.split('#')[1]), `DNS exit ${url}`);
+  }
+}
+const airports = [
+  ['HKG', '香港'], ['TPE', '台湾'], ['TSA', '台湾'], ['KHH', '台湾'],
+  ['SIN', '新加坡'], ['XSP', '新加坡'], ['ICN', '韩国'], ['GMP', '韩国'],
+  ['NRT', '日本'], ['HND', '日本'], ['KIX', '日本'], ['CTS', '日本'], ['FUK', '日本'],
+  ['LAX', '美国']
+];
+function matches(group, name) {
+  const re = text => new RegExp(text.replace(/^\(\?i\)/, ''), 'i');
+  return (!group.filter || re(group.filter).test(name)) &&
+    (!group['exclude-filter'] || !re(group['exclude-filter']).test(name));
+}
+for (const file of SCRIPTS) {
+  for (const name of ['direct-proxies', 'provider-only', 'mixed-provider', 'naming-conflict', 'dialer-loop']) {
+    test(`${file}: references / ${name}`, () => references(execute(file, fixture(name))));
+  }
+  test(`${file}: empty subscription preserved`, () => {
+    const input = {rules: ['MATCH,DIRECT'], dns: {enable: false}};
+    assert.deepEqual(execute(file, input), input);
+  });
+  test(`${file}: core design contracts`, () => {
+    const c = execute(file, fixture('direct-proxies'));
+    assert.equal(c['proxy-groups'].length, 34);
+    for (const name of ['ChatGPT', 'Claude', 'Gemini / NotebookLM', '国外流量']) {
+      assert.ok(!c['proxy-groups'].find(g => g.name === name).proxies.includes('DIRECT'), name);
+    }
+    for (const name of ['Microsoft', 'Apple', '游戏平台']) assert.equal(c['proxy-groups'].find(g => g.name === name)['default-selected'], 'DIRECT');
+    assert.equal(c['proxy-groups'].find(g => g.name === '漏网之鱼').proxies[0], '国外流量');
+    assert.ok(c.rules.includes('RULE-SET,SKULL_ChinaIP,DIRECT'));
+    assert.equal(c.rules.at(-1), 'MATCH,漏网之鱼');
+    assert.ok(c.dns.nameserver.every(url => url.endsWith('#国外流量')));
+    assert.ok(c.dns['proxy-server-nameserver'].every(url => url.endsWith('#DIRECT')));
+  });
+  test(`${file}: airport tokens classified once with letter boundaries`, () => {
+    const c = execute(file, fixture('provider-only'));
+    const groups = c['proxy-groups'].filter(g => /聚合$|^其他地区$/.test(g.name));
+    for (const [code, region] of airports) {
+      for (const name of [code + ' Premium 01', '线路-' + code.toLowerCase() + '02']) {
+        assert.deepEqual(groups.filter(g => matches(g, name)).map(g => g.name), [region + '聚合'], name);
+      }
+    }
+    for (const name of ['SINGLE Premium', 'XSPRESS', 'ATPEZ', 'AGMPZ', 'ANRTZ', 'HNDIRECT', 'KIXAMPLE', 'ACTSPEED', 'FUKUOKA', 'ICNODE', 'TOTALRecall', 'AUTHORity', 'EMAILite']) {
+      assert.deepEqual(groups.filter(g => matches(g, name)).map(g => g.name), ['其他地区'], name);
+    }
+    assert.deepEqual(groups.filter(g => matches(g, 'HKG → NRT 01')).map(g => g.name), ['香港聚合']);
+  });
+  test(`${file}: information nodes removed without removing real nodes`, () => {
+    const real = ['香港01｜不限流量', 'NRT Panel Premium', 'SIN Channel 01', 'TPE Author 02', '美国 USED Premium', '新加坡 TOTAL Premium', '机场专线 SIN 01'];
+    const fake = ['USED: 12 GB', 'TOTAL: 100 GB', 'EXPIRE: 2027-01-01', 'EMAIL: support@example.com', 'Panel: https://example.com', 'Channel: @notice', 'Author: someone', '工单：https://example.com'];
+    const c = execute(file, {proxies: [...real, ...fake].map(name => ({name, type: 'ss'}))});
+    const manual = c['proxy-groups'].find(g => g.name === '全球手动');
+    for (const name of real) assert.ok(manual.proxies.includes(name), name);
+    for (const name of fake) assert.ok(!manual.proxies.includes(name), name);
+    const automatic = c['proxy-groups'].find(g => g.name === '自动选择');
+    for (const name of real) assert.ok(matches(automatic, name), name);
+    for (const name of fake) assert.ok(!matches(automatic, name), name);
+  });
+  test(`${file}: custom patches preserve LAN and AI priority`, () => {
+    const c = execute(file, fixture('direct-proxies'));
+    const index = name => c.rules.findIndex(rule => rule.startsWith('RULE-SET,' + name + ','));
+    const order = ['SKULL_Lan', 'SKULL_OpenAI', 'SKULL_Claude', 'SKULL_Gemini', 'SKULL_CustomDirect', 'SKULL_CustomProxy', 'SKULL_AppleCN', 'SKULL_China', 'SKULL_Foreign'];
+    for (let i = 1; i < order.length; i++) assert.ok(index(order[i]) > index(order[i - 1]), order[i]);
+    assert.ok(c.rules.includes('RULE-SET,SKULL_CustomDirect,DIRECT'));
+    assert.ok(c.rules.includes('RULE-SET,SKULL_CustomProxy,国外流量'));
+    assert.ok(c.dns['nameserver-policy']['rule-set:SKULL_CustomDirect'].every(url => url.endsWith('#DIRECT')));
+    assert.ok(c.dns['nameserver-policy']['rule-set:SKULL_CustomProxy'].every(url => url.endsWith('#国外流量')));
+    for (const [name, leaf] of [['SKULL_CustomDirect', 'direct.list'], ['SKULL_CustomProxy', 'proxy.list'], ['SKULL_FakeIPFilter', 'fake-ip-filter.list']]) {
+      const p = c['rule-providers'][name];
+      assert.equal(p.behavior, 'domain'); assert.equal(p.format, 'text');
+      assert.equal(p.url, 'https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/main/rules/' + leaf);
+      assert.equal(p.proxy, '国外流量');
+    }
+  });
+  test(`${file}: Fake-IP patch keeps static fallback and blacklist inheritance`, () => {
+    const input = fixture('direct-proxies');
+    input.dns = {'fake-ip-filter': ['+.airport.example', '*.lan', 'rule-set:SKULL_FakeIPFilter']};
+    const filter = execute(file, input).dns['fake-ip-filter'];
+    for (const value of ['rule-set:SKULL_FakeIPFilter', '+.airport.example', '*.lan', '*.local', 'time.*.com', '+.pool.ntp.org']) assert.ok(filter.includes(value), value);
+    assert.equal(filter.filter(x => x === 'rule-set:SKULL_FakeIPFilter').length, 1);
+    for (const mode of ['whitelist', 'rule']) {
+      input.dns['fake-ip-filter-mode'] = mode;
+      const dns = execute(file, input).dns;
+      assert.equal(dns['fake-ip-filter-mode'], 'blacklist');
+      assert.ok(!dns['fake-ip-filter'].includes('+.airport.example'));
+      assert.ok(dns['fake-ip-filter'].includes('rule-set:SKULL_FakeIPFilter'));
+    }
+  });
+  test(`${file}: dialer loop fails closed`, () => {
+    const c = execute(file, fixture('dialer-loop'));
+    assert.equal(c.proxies[0]['dialer-proxy'], 'REJECT');
+  });
+  test(`${file}: explicit provider health-check respected`, () => {
+    const c = execute(file, fixture('mixed-provider'));
+    const health = c['proxy-providers'].airport['health-check'];
+    assert.equal(health.enable, false); assert.equal(health.interval, 1200);
+    assert.equal(health.url, 'https://example.com/check');
+    assert.equal(health['expected-status'], undefined);
+  });
+}
+test('two platforms: default groups, rules and providers agree', () => {
+  for (const name of ['direct-proxies', 'provider-only', 'mixed-provider']) {
+    const a = execute(SCRIPTS[0], fixture(name));
+    const b = execute(SCRIPTS[1], fixture(name));
+    assert.deepEqual(a['proxy-groups'], b['proxy-groups']);
+    assert.deepEqual(a.rules, b.rules);
+    assert.deepEqual(a['rule-providers'], b['rule-providers']);
+  }
+});
+test('Bettbox: service and region toggles leave no broken references', () => {
+  const names = ['ChatGPT', 'Claude', 'Gemini / NotebookLM', 'Google', 'GitHub', 'Microsoft', 'Apple', 'Telegram', 'X', 'YouTube', 'Netflix', '游戏平台', '地区分组'];
+  for (const name of names) {
+    const c = execute(SCRIPTS[1], fixture('provider-only'), {toggles: {[name]: false}, noFromEntries: true});
+    references(c);
+    if (name === '地区分组') assert.ok(!c['proxy-groups'].some(g => /聚合$|自动$|^其他地区$/.test(g.name)));
+    else assert.ok(!c['proxy-groups'].some(g => g.name === name));
+    assert.ok(c.rules.includes('RULE-SET,SKULL_CustomProxy,国外流量'));
+  }
+  references(execute(SCRIPTS[1], fixture('mixed-provider'), {toggles: Object.fromEntries(names.map(name => [name, false])), noFromEntries: true}));
+});
+test('platform TUN ownership preserved', () => {
+  const input = fixture('direct-proxies');
+  input.tun = {enable: false, stack: 'system', 'auto-route': false};
+  assert.deepEqual(execute(SCRIPTS[1], input).tun, input.tun);
+  const tun = execute(SCRIPTS[0], input).tun;
+  assert.equal(tun.enable, false); assert.equal(tun.stack, 'system'); assert.equal(tun['auto-route'], false);
+});
+
+test('self-maintained rule files match their domain/text provider declarations', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const {ROOT} = require('./helpers');
+  const config = execute(SCRIPTS[0], fixture('direct-proxies'));
+  const lists = {};
+  for (const [name, p] of Object.entries(config['rule-providers'])) {
+    if (!p.url.includes('/hh1848/')) continue;
+    const relative = new URL(p.url).pathname.split('/main/')[1];
+    assert.ok(relative && relative.startsWith('rules/'));
+    const text = fs.readFileSync(path.join(ROOT, relative), 'utf8');
+    const rules = text.split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+    assert.equal(new Set(rules).size, rules.length, name + ': duplicate domains');
+    for (const domain of rules) {
+      // Deliberately restrict manual lists to exact names / apex-and-subdomain suffixes.
+      // Classical DOMAIN-SUFFIX rows, schemes, IPs, bare TLDs and broad wildcards are mistakes here.
+      const value = domain.replace(/^\+\./, '');
+      assert.ok(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(value), `${name}: invalid domain ${domain}`);
+      assert.ok(value.length <= 253 && value.split('.').every(label => label.length <= 63));
+    }
+    lists[name] = rules;
+  }
+  assert.deepEqual(Object.keys(lists).sort(), ['SKULL_CustomDirect', 'SKULL_CustomProxy', 'SKULL_FakeIPFilter']);
+  const base = value => value.replace(/^\+\./, '');
+  for (const direct of lists.SKULL_CustomDirect) {
+    for (const proxy of lists.SKULL_CustomProxy) {
+      const a = base(direct), b = base(proxy);
+      const conflict = a === b || (direct.startsWith('+.') && b.endsWith('.' + a)) || (proxy.startsWith('+.') && a.endsWith('.' + b));
+      assert.ok(!conflict, `conflicting direct/proxy patches: ${direct} / ${proxy}`);
+    }
+  }
+});

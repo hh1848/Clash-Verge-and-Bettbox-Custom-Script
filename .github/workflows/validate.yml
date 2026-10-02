@@ -1,0 +1,32 @@
+name: Validate scripts
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check JavaScript syntax
+        run: |
+          node --check Clash-Verge-Rev-mihomoScript.js
+          node --check Bettbox-mihomoScript.js
+      - name: Validate behavior, references and rule files
+        run: node --test tests/validate.js
+      - name: Install real QuickJS engine
+        run: python -m pip install quickjs==1.19.4
+      - name: Check QuickJS behavior against Node
+        run: python tests/quickjs_check.py

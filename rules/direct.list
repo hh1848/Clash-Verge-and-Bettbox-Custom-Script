@@ -1,0 +1,3 @@
+# Domain/text: +.domain matches the apex and all subdomains.
+# Confirmed domestic service; use this layer only for small upstream corrections.
++.chatglm.cn

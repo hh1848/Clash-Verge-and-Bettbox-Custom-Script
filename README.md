@@ -50,8 +50,8 @@
 
 | 客户端 | 平台 | 当前版本 | 脚本 |
 | --- | --- | --- | --- |
-| **Clash Verge Rev** | Windows / macOS / Linux | `2026.09.29-r1` | [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) |
-| **Bettbox** | Android | `2026.09.29-r1` | [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) |
+| **Clash Verge Rev** | Windows / macOS / Linux | `2026.10.02-r1` | [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) |
+| **Bettbox** | Android | `2026.10.02-r1` | [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) |
 
 > 需要使用 **Mihomo 内核**，并支持 `include-all`、`exclude-type`、Rule Providers、`.mrs` 等相关特性。
 
@@ -102,24 +102,18 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
 
 ## 工作原理与配置规模
 
-```text
-机场订阅
-   ├── proxies ─────────────┐
-   └── proxy-providers ─────┤  ← 节点 / provider 保留
-                            ▼
-                     自定义覆写脚本
-                            │
-        ┌───────────────────┼───────────────────┐
-        ▼                   ▼                   ▼
-  proxy-groups            rules          rule-providers
-  两版: 34 组 / 37 条 / 31 个
-  25 可见 + 9 隐藏                         │
-        │                                  │
-        └────────────── DNS ───────────────┘
-                 Fake-IP + 国内外分流
-                            │
-                            ▼
-                     最终 Mihomo 配置
+```mermaid
+flowchart TD
+    A[机场订阅] --> B[两端覆写脚本]
+    B --> C[34 个策略组]
+    B --> D[39 条路由规则]
+    E[31 个上游规则集] --> D
+    F[3 个自维护补丁] --> D
+    F --> G[Fake-IP 与 DNS 分流]
+    E --> G
+    D --> H[最终 Mihomo 配置]
+    G --> H
+    C --> H
 ```
 
 > 两版脚本均定义 34 个策略组。若订阅节点、provider、listener、tunnel、NTP 或 Rule Provider 仍引用旧策略组，脚本会额外保留必要旧组并设置为隐藏，因此最终组数可能更高。
@@ -131,8 +125,8 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
 | 脚本定义策略组 | **34** | **34** |
 | 主界面可见组 | **25** | **25** |
 | 隐藏地区测速组 | **9** | **9** |
-| 分流规则 | **37** | **37** |
-| Rule Providers | **31** | **31** |
+| 分流规则 | **39** | **39** |
+| Rule Providers | **34** | **34** |
 
 Bettbox 关闭服务或地区开关后，对应组会动态减少。
 
@@ -244,6 +238,16 @@ AI 组选项仅包含：
 
 地区规则同时支持中文、繁体中文、emoji 国旗、英文国家/城市名称、常见机场代码和缩写。
 
+| 地区 | 机场代码 |
+| --- | --- |
+| 香港 | `HKG`（原已支持） |
+| 台湾 | `TPE` / `TSA` / `KHH` |
+| 新加坡 | `SIN` / `XSP` |
+| 韩国 | `ICN` / `GMP` |
+| 日本 | `NRT` / `HND` / `KIX` / `CTS` / `FUK` |
+
+机场代码按字母边界匹配，支持 `SIN02`、`NRT Premium 01` 等命名，不会把 `SINGLE` 误判为新加坡。
+
 美国识别额外覆盖 Los Angeles、San Jose、Seattle、New York、Phoenix、Salt Lake City、San Francisco、Dallas、Chicago、Las Vegas、Ashburn、Boston、Miami、Denver、Houston、Austin、Washington D.C. 等常见节点名。
 
 欧洲识别覆盖英国、德国、法国、荷兰、西班牙、意大利、瑞士、瑞典、芬兰、挪威、波兰、爱尔兰、奥地利、比利时、捷克、丹麦、葡萄牙、希腊等常见区域标识。
@@ -258,7 +262,7 @@ AI 组选项仅包含：
 Expire / Traffic Remaining / Website ...
 ```
 
-过滤规则刻意避免简单匹配“流量”两个字，以减少误伤“香港01｜不限流量”这类真实节点。
+过滤规则刻意避免简单匹配“流量”两个字，以减少误伤“香港01｜不限流量”这类真实节点。新增 `USED: 12 GB` / `TOTAL: 100 GB` 和 `EMAIL:` / `Panel:` / `Channel:` / `Author:` / `工单：` 等明确标签；不单独过滤“机场”或普通节点名里的 `Panel` / `Channel`。
 
 ### 全球手动排序
 
@@ -300,13 +304,14 @@ Expire / Traffic Remaining / Website ...
 
 ## 分流规则
 
-两版均有 **37 条**分流规则；自上而下匹配，命中即停止。
+两版均有 **39 条**分流规则；自上而下匹配，命中即停止。
 
 | 阶段 | 内容 | 目标 | 条数 |
 | --- | --- | --- | ---: |
 | 1 | `private` 局域网域名 | `DIRECT` | 1 |
 | 2 | NotebookLM / AI Studio / Gemini API 精确域名 | `Gemini / NotebookLM` | 5 |
 | 3 | `openai` / `anthropic` / `google-gemini` | 三个 AI 组 | 3 |
+| 补丁 | `SKULL_CustomDirect` / `SKULL_CustomProxy` | `DIRECT` / `国外流量` | 2 |
 | 4 | `apple@cn` / `microsoft@cn` / 国内游戏平台与下载 CDN | `DIRECT` | 4 |
 | 5 | 七个平台域名规则 | `游戏平台` | 7 |
 | 6 | YouTube / Google / GitHub / Microsoft / Apple / Telegram / X / Netflix | 对应服务组 | 8 |
@@ -315,10 +320,12 @@ Expire / Traffic Remaining / Website ...
 | 9 | private / Google / Telegram / Twitter / Netflix IP | 对应目标，`no-resolve` | 5 |
 | 10 | China IP | `DIRECT`，允许解析 | 1 |
 | 末 | `MATCH` | `漏网之鱼` | 1 |
-|  | **每版合计** |  | **37** |
+|  | **每版合计** |  | **39** |
 
 ### 关键优先级
 
+- LAN 与 AI 强制代理位于自定义补丁之前，防止直连补丁意外绕过 AI 代理约束
+- 自定义直连先于自定义代理，二者均优先于普通服务及 CN/Foreign 通用分类；CI 拒绝两个文件中的重叠规则
 - NotebookLM / Gemini 精确域名位于通用 Google 之前，防止 AI 流量被 Google 组提前接管
 - `apple@cn` 位于通用 Apple 之前
 - `microsoft@cn` 位于通用 Microsoft 之前
@@ -338,9 +345,31 @@ Bettbox 中关闭某个服务开关后：
 
 ## Rule Providers
 
-两版均定义 **31 个** `SKULL_*` Rule Providers，均来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)，使用 `.mrs` 格式并通过 jsDelivr 拉取，默认更新间隔 `86400s`。
+两版均定义 **34 个** `SKULL_*` Rule Providers：31 个来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)，使用 `.mrs` 格式并通过 jsDelivr 拉取；另有 3 个本仓库维护的 `domain/text` 补丁集，通过 GitHub Raw 拉取。全部经 `国外流量` 下载，默认更新间隔 `86400s`。
 
-### 域名规则（两版均为 25 个）
+### 自维护补丁（3 个）
+
+| 文件 | Provider | 用途 |
+| --- | --- | --- |
+| [`rules/direct.list`](./rules/direct.list) | `SKULL_CustomDirect` | 上游误判的国内域名直连；初始收录 `chatglm.cn` |
+| [`rules/proxy.list`](./rules/proxy.list) | `SKULL_CustomProxy` | 上游遗漏的代理域名；初始仅注释，无活动规则 |
+| [`rules/fake-ip-filter.list`](./rules/fake-ip-filter.list) | `SKULL_FakeIPFilter` | 追加 Fake-IP 兼容排除；初始为 NTP 与 Microsoft 联网检测 |
+
+三个文件使用 **域名文本格式**，每行只写域名，不写 `DOMAIN-SUFFIX,`、策略组或 YAML `payload:`：
+
+```text
+# 以下仅为格式示例，不要把示例域名加入正式规则
++.example.com
+api.example.net
+```
+
+`+.example.com` 匹配主域和全部子域；`api.example.net` 仅匹配该域名。修改前确认分流需求，避免添加公共顶级域、泛匹配或过大的 CDN 后缀；CI 校验格式、重复行及直连/代理冲突。
+
+`CustomDirect` / `CustomProxy` 同时接入 DNS policy，分别使用国内 DoH 直连和境外 DoH 经 `国外流量`，并先于通用 CN 分类；AI DNS 仍优先跟随对应 AI 组。
+
+补丁更新只需修改 `rules/*.list`，两份 JS 无需重复修改。提交后等待内核下一轮更新，或在客户端执行规则集更新；**这不是即时推送**。首次使用必须先发布这三个文件到 `main`，再加载新版脚本，否则 Raw 地址返回 404。已有缓存时保留最近成功下载的内容；远端不可达且无缓存时，补丁不能生效。
+
+### 上游域名规则（两版均为 25 个）
 
 ```text
 private
@@ -411,12 +440,14 @@ fake-ip-filter-mode: blacklist
 | --- | --- | --- |
 | Bootstrap | `223.5.5.5` / `119.29.29.29` | 本地 |
 | 默认 / 国外域名 | Cloudflare DoH / Google DoH | `#国外流量` |
-| 中国域名 / LAN / Apple CN / Microsoft CN | AliDNS DoH / DNSPod DoH | `#DIRECT` |
-| 国内游戏与下载 CDN（Clash Verge Rev） | AliDNS DoH / DNSPod DoH | `#DIRECT` |
+| LAN / 私有域名 | 系统 DNS | `system` |
+| 中国域名 / 自定义直连 / Apple CN / Microsoft CN | AliDNS DoH / DNSPod DoH | `#DIRECT` |
+| 自定义代理 | Cloudflare DoH / Google DoH | `#国外流量` |
+| 国内游戏与下载 CDN（两版） | AliDNS DoH / DNSPod DoH | `#DIRECT` |
 | `direct-nameserver` | AliDNS DoH / DNSPod DoH | `DIRECT` |
 | 代理节点域名 | AliDNS DoH / DNSPod DoH | `DIRECT` |
 
-Bettbox 版虽同样让国内游戏与下载 CDN 的**业务规则**直连，但目前没有为这两类域名添加专门的 `nameserver-policy`；其 DNS 查询会按现有 DNS 配置处理。两端网络环境不同，排查游戏更新时可同时检查连接策略与 DNS 查询出口。
+两版均为国内游戏与下载 CDN 设置前置直连规则及专门的国内 DoH policy；排查游戏更新时，可同时检查连接策略与 DNS 查询出口。
 
 设计目的：
 
@@ -430,15 +461,9 @@ Bettbox 版虽同样让国内游戏与下载 CDN 的**业务规则**直连，但
 
 ### Fake-IP Filter
 
-两版均包含局域网、时间同步、QQ 登录等基础排除项。Clash Verge Rev 版另外加入：
+两版均合并 `rule-set:SKULL_FakeIPFilter`、订阅中兼容的 blacklist 和脚本固定排除项，去重后输出。订阅原为 whitelist / rule 模式时不继承其列表，避免把不同语义直接套入 blacklist。
 
-```text
-+.pool.ntp.org
-+.msftconnecttest.com
-+.msftncsi.com
-```
-
-用于桌面系统的 NTP 与 Windows 网络连通性检测场景。
+局域网、时间同步、QQ 登录等基础项保留在 JS 中；Clash Verge Rev 还保留 Windows 网络检测项。远端补丁初始含 `+.pool.ntp.org`、`+.msftconnecttest.com`、`+.msftncsi.com`，可独立追加兼容域名。远端更新失败不会移除脚本本地基础项；排除 Fake-IP 不代表将该域名直连，实际连接仍按路由规则选择出口。
 
 ---
 
@@ -508,7 +533,7 @@ Netflix
 
 | 项目 | Clash Verge Rev | Bettbox |
 | --- | --- | --- |
-| 核心策略组 / 规则 / Rule Providers | 34 / 37 / 31 | 默认 34 / 37 / 31，组可被开关裁剪 |
+| 核心策略组 / 规则 / Rule Providers | 34 / 39 / 34 | 默认 34 / 39 / 34，组可被开关裁剪 |
 | 地区自动测速组 | 9 个，全部隐藏 | 9 个，全部隐藏 |
 | 自动测速间隔 | 600s | 600s |
 | 节点自然排序 | 纯 JS 实现，避免依赖 `Intl` | 同一套纯 JS 实现，兼容 QuickJS |
@@ -517,7 +542,7 @@ Netflix
 | `find-process-mode` | `strict` | `off` ※ |
 | 顶层 `ipv6` | 不强制覆盖 | `false` ※ |
 | TUN | 在原配置上补充 `mixed`、auto-route、strict-route、auto-detect-interface、DNS hijack；不强制开启 | 不覆写 `config.tun` |
-| Fake-IP Filter | 基础项 + Windows/NTP 额外项 | 基础项 |
+| Fake-IP Filter | 自维护补丁 + 原 blacklist + 基础项 + Windows 检测 | 自维护补丁 + 原 blacklist + 基础项 |
 
 ※ Bettbox 会在脚本执行**之后**继续应用 App 内设置，因此这些字段的最终值以客户端设置为准。详见下方「常规增强参数」。
 
@@ -645,7 +670,7 @@ JavaScript 排序只能直接处理 `config.proxies` 中已经展开的节点。
 <details>
 <summary><b>规则集首次加载失败怎么办？</b></summary>
 
-Rule Providers 通过 jsDelivr 获取 `.mrs` 文件。首次加载需要网络可达；失败时相关流量会继续匹配后续规则或最终进入 `漏网之鱼`，后续按 interval 重新更新。
+上游 Rule Providers 通过 jsDelivr 获取 `.mrs` 文件，自维护补丁通过 GitHub Raw 获取 `.list` 文件。首次加载需要网络可达；失败时相关流量会继续匹配后续规则或最终进入 `漏网之鱼`，后续按 interval 重新更新。
 
 </details>
 
@@ -674,6 +699,29 @@ DNS 层两版均设置 `ipv6: false`；Bettbox 另外设置顶层 `ipv6: false`�
 
 ---
 
+## 自动验证与维护
+
+GitHub Actions 在 push、pull request 和手动触发时运行：
+
+- 两份 JS 的语法检查，以及合成订阅中的内联节点、provider-only、混合、重名、旧组依赖与拨号循环场景
+- Rule Provider / 策略组 / DNS 引用完整性、下载 URL 结构与本仓库文件映射、规则文件格式及冲突
+- AI 与国外流量的代理约束、Microsoft / Apple / 游戏平台的 `default-selected: DIRECT`、漏网之鱼默认出口和两端一致性
+- Bettbox 的 13 个单独开关及全部关闭场景；真实 QuickJS 引擎与 Node 的输出对照
+
+本地运行：
+
+```bash
+node --check Clash-Verge-Rev-mihomoScript.js
+node --check Bettbox-mihomoScript.js
+node --test tests/validate.js
+python -m pip install quickjs==1.19.4
+python tests/quickjs_check.py
+```
+
+测试配置全部使用示例地址与假密码，不需要真实订阅。CI 不访问远端规则 URL，因此 PR 新增的补丁不需要提前发布；远端资源可达性、真实节点连接、客户端最终覆写行为仍需在设备上检查。QuickJS 对照不等同于 Clash Verge Rev 的 Boa 引擎或客户端端到端验证。
+
+---
+
 ## 问题反馈
 
 如果遇到脚本不生效、节点分类错误、规则命中异常或 DNS 行为异常，可通过 [GitHub Issues](https://github.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/issues) 反馈。
@@ -693,6 +741,7 @@ DNS 层两版均设置 `ipv6: false`；Bettbox 另外设置顶层 `ipv6: false`�
 
 ## 致谢
 
+- [HenryChiao/MIHOMO_YAMLS](https://github.com/HenryChiao/MIHOMO_YAMLS) — 自维护补丁、地区机场代码与规则工程化思路
 - [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — Mihomo 内核
 - [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) — GeoSite / GeoIP `.mrs` 规则集
 - [Koolson/Qure](https://github.com/Koolson/Qure) · [0xWans/Qure](https://github.com/0xWans/Qure) · [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) — 图标资源

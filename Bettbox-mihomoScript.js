@@ -38,7 +38,7 @@ var serviceConfigs = [
 ];
 
 // Bettbox Android 全局覆写脚本
-// Version: 2026.10.01-r1
+// Version: 2026.10.02-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：设置 -> 高级设置 -> 脚本；配置 -> 订阅 -> 覆写 -> 脚本。
 
@@ -141,7 +141,7 @@ function main(config) {
 
   // 仅排除明确的信息/提醒节点，避免误伤“香港01｜不限流量”等正常节点。
   const PSEUDO_PATTERN_BODY =
-    "到期|过期|剩余(?:流量|时间|天数|[:：]|\\s*\\d)|流量(?:剩余|到期|重置|[:：]\\s*\\d)|套餐(?:到期|剩余|[:：])|官网(?:地址)?|网址|订阅(?:到期|更新|地址)|(?:下次|距离).*重置|公告(?:[:：]|$)|通知(?:[:：]|$)|提示(?:[:：]|$)|教程(?:[:：]|$)|使用说明|使用须知|客服(?:[:：]|$)|联系(?:客服)?|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire(?:d)?(?:\\s*[:：]|\\s*\\d|$)|Traffic(?:\\s*(?:Left|Remaining)|[:：]\\s*\\d)|Remaining(?:\\s*Traffic)?|Website(?:\\s*[:：]|$)";
+    "到期|过期|剩余(?:流量|时间|天数|[:：]|\\s*\\d)|流量(?:剩余|到期|重置|[:：]\\s*\\d)|套餐(?:到期|剩余|[:：])|官网(?:地址)?|网址|订阅(?:到期|更新|地址)|(?:下次|距离).*重置|公告(?:[:：]|$)|通知(?:[:：]|$)|提示(?:[:：]|$)|教程(?:[:：]|$)|使用说明|使用须知|客服(?:[:：]|$)|联系(?:客服)?|有超时|超时.*重启|请.*重启网络|重启.*网络|Expire(?:d)?(?:\\s*[:：]|\\s*\\d|$)|Traffic(?:\\s*(?:Left|Remaining)|[:：]\\s*\\d)|Remaining(?:\\s*Traffic)?|Website(?:\\s*[:：]|$)|(?:^|[^A-Za-z])(?:USED|TOTAL)(?:\\s*[:：]\\s*\\d)|(?:^|[^A-Za-z])(?:EMAIL|Panel|Channel|Author)\\s*[:：]|工单\\s*[:：]";
 
   const EXCLUDE = `(?i)(${PSEUDO_PATTERN_BODY})`;
 
@@ -181,10 +181,10 @@ function main(config) {
   const REGION_PATTERN_BODY = {
     hk: "🇭🇰|香港|Hong ?Kong|(?:^|[^A-Za-z])HK(?:G)?(?:[0-9]|[^A-Za-z]|$)",
     mo: "🇲🇴|澳门|澳門|Macao|Macau|(?:^|[^A-Za-z])MO(?:[0-9]|[^A-Za-z]|$)",
-    tw: "🇹🇼|台湾|台灣|Taiwan|Taipei|(?:^|[^A-Za-z])TW(?:N)?(?:[0-9]|[^A-Za-z]|$)",
-    sg: "🇸🇬|新加坡|狮城|獅城|Singapore|(?:^|[^A-Za-z])SG(?:P)?(?:[0-9]|[^A-Za-z]|$)",
-    kr: "🇰🇷|韩国|韓國|Korea|Seoul|(?:^|[^A-Za-z])(?:KR|KOR)(?:[0-9]|[^A-Za-z]|$)",
-    jp: "🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|(?:^|[^A-Za-z])JP(?:N)?(?:[0-9]|[^A-Za-z]|$)",
+    tw: "🇹🇼|台湾|台灣|Taiwan|Taipei|(?:^|[^A-Za-z])(?:TW(?:N)?|TPE|TSA|KHH)(?:[0-9]|[^A-Za-z]|$)",
+    sg: "🇸🇬|新加坡|狮城|獅城|Singapore|(?:^|[^A-Za-z])(?:SG(?:P)?|SIN|XSP)(?:[0-9]|[^A-Za-z]|$)",
+    kr: "🇰🇷|韩国|韓國|Korea|Seoul|(?:^|[^A-Za-z])(?:KR|KOR|ICN|GMP)(?:[0-9]|[^A-Za-z]|$)",
+    jp: "🇯🇵|日本|东京|東京|大阪|Japan|Tokyo|Osaka|(?:^|[^A-Za-z])(?:JP(?:N)?|NRT|HND|KIX|CTS|FUK)(?:[0-9]|[^A-Za-z]|$)",
     us: "🇺🇸|美国|美國|美[.·|｜_\\s-]|United ?States|America|Los ?Angeles|洛杉矶|洛杉磯|San ?Jose|圣何塞|聖何塞|Seattle|西雅图|西雅圖|New ?York|纽约|紐約|Phoenix|凤凰城|鳳凰城|Salt ?Lake(?: ?City)?|盐湖城|鹽湖城|San ?Francisco|旧金山|舊金山|Dallas|达拉斯|達拉斯|Chicago|芝加哥|Las ?Vegas|拉斯维加斯|拉斯維加斯|Ashburn|阿什本|Boston|波士顿|波士頓|Miami|迈阿密|邁阿密|Denver|丹佛|Houston|休斯顿|休士頓|Austin|奥斯汀|奧斯汀|Washington ?D\\.?C\\.?|华盛顿(?:特区)?|華盛頓(?:特區)?|(?:^|[^A-Za-z])(?:LAX|SJC|SEA|NYC|PHX|SLC|SFO|DFW|ORD|LAS|IAD|BOS|MIA|DEN|IAH|HOU|DCA|US|USA)(?:[0-9]|[^A-Za-z]|$)",
     eu: "🇪🇺|🇬🇧|🇩🇪|🇫🇷|🇳🇱|🇪🇸|🇮🇹|🇨🇭|🇸🇪|🇫🇮|🇳🇴|🇵🇱|🇮🇪|🇦🇹|🇧🇪|🇨🇿|🇩🇰|🇵🇹|🇬🇷|🇮🇸|🇱🇺|欧洲|歐洲|Europe|European|英国|英國|法国|法國|德国|德國|荷兰|荷蘭|西班牙|意大利|瑞士|瑞典|芬兰|挪威|Norway|波兰|爱尔兰|London|Paris|Frankfurt|Amsterdam|Madrid|Milan|Zurich|Stockholm|Helsinki|Oslo|Warsaw|Dublin|(?:^|[^A-Za-z])(?:EU|UK|GB|GBR|DE|DEU|FR|FRA|NL|NLD|ES|ESP|IT|ITA|CH|CHE|SE|SWE|FI|FIN|NOR|PL|POL|IE|IRL|AT|AUT|BE|BEL|CZ|CZE|DK|DNK|PT|PRT|GR|GRC)(?:[0-9]|[^A-Za-z]|$)"
   };
@@ -344,6 +344,21 @@ function main(config) {
     format: "mrs",
     path: `./ruleset/skull/${file}`,
     url: DOMAIN_BASE + file,
+    interval: RULE_INTERVAL,
+    proxy: RULESET_DOWNLOAD_PROXY,
+    "size-limit": RULESET_SIZE_LIMIT
+  });
+
+  // 自维护的小型域名补丁：domain/text 同时支持分流和 DNS rule-set 引用。
+  // 使用 Raw 地址避免 CDN 的分支缓存延迟；热修复只需修改 rules/*.list。
+  const CUSTOM_RULE_BASE =
+    "https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/main/rules/";
+  const customDomainProvider = (file) => ({
+    type: "http",
+    behavior: "domain",
+    format: "text",
+    path: `./ruleset/skull/custom-${file}`,
+    url: CUSTOM_RULE_BASE + file,
     interval: RULE_INTERVAL,
     proxy: RULESET_DOWNLOAD_PROXY,
     "size-limit": RULESET_SIZE_LIMIT
@@ -559,6 +574,10 @@ function main(config) {
 
   // ---------- 5. Rule Providers ----------
   const customRuleProviders = {
+    SKULL_CustomDirect: customDomainProvider("direct.list"),
+    SKULL_CustomProxy: customDomainProvider("proxy.list"),
+    SKULL_FakeIPFilter: customDomainProvider("fake-ip-filter.list"),
+
     SKULL_Lan: domainProvider("private.mrs"),
     SKULL_China: domainProvider("cn.mrs"),
     SKULL_Foreign: domainProvider("geolocation-!cn.mrs"),
@@ -840,7 +859,7 @@ function main(config) {
   preserveDependencies();
 
   // ---------- 6. 分流规则 ----------
-  // 优先级：LAN → AI → 特殊国际服务 → 中国域名 → 一般国外域名 → IP → MATCH
+  // 优先级：LAN → AI → 自定义直连/代理补丁 → 特殊国际服务 → 中国域名 → 国外域名 → IP → MATCH
   // NotebookLM / Gemini 必须早于通用 Google。
   config.rules = [
     // LAN
@@ -856,6 +875,10 @@ function main(config) {
     `RULE-SET,SKULL_OpenAI,${serviceTarget("ChatGPT")}`,
     `RULE-SET,SKULL_Claude,${serviceTarget("Claude")}`,
     `RULE-SET,SKULL_Gemini,${serviceTarget("Gemini / NotebookLM")}`,
+
+    // LAN / AI 保护规则先匹配；补丁可纠正其后的服务与国内外通用分类。
+    "RULE-SET,SKULL_CustomDirect,DIRECT",
+    "RULE-SET,SKULL_CustomProxy,国外流量",
 
     // 中国区 Apple / Microsoft 优先直连，不受对应服务组开关影响。
     "RULE-SET,SKULL_AppleCN,DIRECT",
@@ -951,6 +974,7 @@ function main(config) {
     // fallback-filter / nameserver-policy 等可能改变查询路径的 DNS 字段。
     "fake-ip-filter": [
       ...new Set([
+        "rule-set:SKULL_FakeIPFilter",
         ...inheritedFilter,
         "*.lan",
         "*.local",
@@ -983,6 +1007,8 @@ function main(config) {
 
       // LAN / 私有域名使用 Android 系统 DNS；国内公网域名继续使用国内 DoH。
       "rule-set:SKULL_Lan": [...LAN_DNS],
+      "rule-set:SKULL_CustomDirect": [...DOMESTIC_DNS],
+      "rule-set:SKULL_CustomProxy": proxyDns("国外流量"),
       "rule-set:SKULL_China": [...DOMESTIC_DNS],
       "rule-set:SKULL_AppleCN": [...DOMESTIC_DNS],
       "rule-set:SKULL_MicrosoftCN": [...DOMESTIC_DNS],
