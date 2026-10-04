@@ -73,7 +73,7 @@
 | 客户端 | 平台 | 当前版本 | 脚本 |
 | --- | --- | --- | --- |
 | **Clash Verge Rev** | Windows / macOS / Linux | `2026.10.02-r1` | [`Clash-Verge-Rev-mihomoScript.js`](./Clash-Verge-Rev-mihomoScript.js) |
-| **Bettbox** | Android | `2026.10.02-r1` | [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) |
+| **Bettbox** | Android | `2026.10.04-r1` | [`Bettbox-mihomoScript.js`](./Bettbox-mihomoScript.js) |
 
 > 需要使用 **Mihomo 内核**，并支持 `include-all`、`exclude-type`、Rule Providers、`.mrs` 等相关特性。
 
@@ -128,7 +128,7 @@ https://raw.githubusercontent.com/hh1848/Clash-Verge-and-Bettbox-Custom-Script/m
 flowchart TD
     A[机场订阅] --> B[两端覆写脚本]
     B --> C[34 个策略组]
-    B --> D[39 条路由规则]
+    B --> D[39 / 41 条路由规则]
     E[31 个上游规则集] --> D
     F[3 个自维护补丁] --> D
     F --> G[Fake-IP 与 DNS 分流]
@@ -147,7 +147,7 @@ flowchart TD
 | 脚本定义策略组 | **34** | **34** |
 | 主界面可见组 | **25** | **25** |
 | 隐藏地区测速组 | **9** | **9** |
-| 分流规则 | **39** | **39** |
+| 分流规则 | **39** | **41** |
 | Rule Providers | **34** | **34** |
 
 Bettbox 关闭服务或地区开关后，对应组会动态减少。
@@ -326,13 +326,14 @@ Expire / Traffic Remaining / Website ...
 
 ## 分流规则
 
-两版均有 **39 条**分流规则；自上而下匹配，命中即停止。
+Clash Verge Rev 有 **39 条**、Bettbox 有 **41 条**分流规则；自上而下匹配，命中即停止。
 
 | 阶段 | 内容 | 目标 | 条数 |
 | --- | --- | --- | ---: |
 | 1 | `private` 局域网域名 | `DIRECT` | 1 |
 | 2 | NotebookLM / AI Studio / Gemini API 精确域名 | `Gemini / NotebookLM` | 5 |
 | 3 | `openai` / `anthropic` / `google-gemini` | 三个 AI 组 | 3 |
+| 校时（仅 Bettbox） | `pool.ntp.org` 及子域名 / UDP 目标端口 123 | `DIRECT` | 2 |
 | 补丁 | `SKULL_CustomDirect` / `SKULL_CustomProxy` | `DIRECT` / `国外流量` | 2 |
 | 4 | `apple@cn` / `microsoft@cn` / 国内游戏平台与下载 CDN | `DIRECT` | 4 |
 | 5 | 七个平台域名规则 | `游戏平台` | 7 |
@@ -342,11 +343,12 @@ Expire / Traffic Remaining / Website ...
 | 9 | private / Google / Telegram / Twitter / Netflix IP | 对应目标，`no-resolve` | 5 |
 | 10 | China IP | `DIRECT`，允许解析 | 1 |
 | 末 | `MATCH` | `漏网之鱼` | 1 |
-|  | **每版合计** |  | **39** |
+|  | **Clash Verge Rev / Bettbox 合计** |  | **39 / 41** |
 
 ### 关键优先级
 
 - LAN 与 AI 强制代理位于自定义补丁之前，防止直连补丁意外绕过 AI 代理约束
+- Bettbox 在 AI 规则之后、通用服务和国外域名规则之前直连 `pool.ntp.org` 及子域名与 UDP/123；覆盖 OPPO 手机管家、云服务、健康、应用商店等应用共用的校时请求，不按应用包名整体放行
 - 自定义直连先于自定义代理，二者均优先于普通服务及 CN/Foreign 通用分类；CI 拒绝两个文件中的重叠规则
 - NotebookLM / Gemini 精确域名位于通用 Google 之前，防止 AI 流量被 Google 组提前接管
 - `apple@cn` 位于通用 Apple 之前
@@ -464,6 +466,7 @@ fake-ip-filter-mode: blacklist
 | 默认 / 国外域名 | Cloudflare DoH / Google DoH | `#国外流量` |
 | LAN / 私有域名 | 系统 DNS | `system` |
 | 中国域名 / 自定义直连 / Apple CN / Microsoft CN | AliDNS DoH / DNSPod DoH | `#DIRECT` |
+| `pool.ntp.org` 及子域名（仅 Bettbox） | AliDNS DoH / DNSPod DoH | `#DIRECT` |
 | 自定义代理 | Cloudflare DoH / Google DoH | `#国外流量` |
 | 国内游戏与下载 CDN（两版） | AliDNS DoH / DNSPod DoH | `#DIRECT` |
 | `direct-nameserver` | AliDNS DoH / DNSPod DoH | `DIRECT` |
@@ -555,7 +558,7 @@ Netflix
 
 | 项目 | Clash Verge Rev | Bettbox |
 | --- | --- | --- |
-| 核心策略组 / 规则 / Rule Providers | 34 / 39 / 34 | 默认 34 / 39 / 34，组可被开关裁剪 |
+| 核心策略组 / 规则 / Rule Providers | 34 / 39 / 34 | 默认 34 / 41 / 34，组可被开关裁剪 |
 | 地区自动测速组 | 9 个，全部隐藏 | 9 个，全部隐藏 |
 | 自动测速间隔 | 600s | 600s |
 | 节点自然排序 | 纯 JS 实现，避免依赖 `Intl` | 同一套纯 JS 实现，兼容 QuickJS |
@@ -565,6 +568,7 @@ Netflix
 | 顶层 `ipv6` | 不强制覆盖 | `false` ※ |
 | TUN | 在原配置上补充 `mixed`、auto-route、strict-route、auto-detect-interface、DNS hijack；不强制开启 | 不覆写 `config.tun` |
 | Fake-IP Filter | 自维护补丁 + 原 blacklist + 基础项 + Windows 检测 | 自维护补丁 + 原 blacklist + 基础项 |
+| 系统校时直连 | 按原有域名 / IP 规则分流 | `pool.ntp.org` 及子域名、UDP/123 直连；pool 使用国内 DoH |
 
 ※ Bettbox 会在脚本执行**之后**继续应用 App 内设置，因此这些字段的最终值以客户端设置为准。详见下方「常规增强参数」。
 

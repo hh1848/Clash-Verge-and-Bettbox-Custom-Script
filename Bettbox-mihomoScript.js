@@ -38,7 +38,7 @@ var serviceConfigs = [
 ];
 
 // Bettbox Android 全局覆写脚本
-// Version: 2026.10.02-r1
+// Version: 2026.10.04-r1
 // 目标：国内直连、国外代理；AI 强制代理；常用国际服务独立；地区聚合（自动测速 + 手动节点）。
 // 用法：设置 -> 高级设置 -> 脚本；配置 -> 订阅 -> 覆写 -> 脚本。
 
@@ -859,7 +859,7 @@ function main(config) {
   preserveDependencies();
 
   // ---------- 6. 分流规则 ----------
-  // 优先级：LAN → AI → 自定义直连/代理补丁 → 特殊国际服务 → 中国域名 → 国外域名 → IP → MATCH
+  // 优先级：LAN → AI → NTP 校时直连 → 自定义直连/代理补丁 → 特殊国际服务 → 中国域名 → 国外域名 → IP → MATCH
   // NotebookLM / Gemini 必须早于通用 Google。
   config.rules = [
     // LAN
@@ -875,6 +875,11 @@ function main(config) {
     `RULE-SET,SKULL_OpenAI,${serviceTarget("ChatGPT")}`,
     `RULE-SET,SKULL_Claude,${serviceTarget("Claude")}`,
     `RULE-SET,SKULL_Gemini,${serviceTarget("Gemini / NotebookLM")}`,
+
+    // OPPO 等系统应用共用 NTP 校时；Fake-IP 排除只返回真实 IP，不决定出口。
+    // 域名规则覆盖 pool 及其子域名；仅 UDP/123 直连，兼容其他校时服务器与 IP 请求。
+    "DOMAIN-SUFFIX,pool.ntp.org,DIRECT",
+    "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",
 
     // LAN / AI 保护规则先匹配；补丁可纠正其后的服务与国内外通用分类。
     "RULE-SET,SKULL_CustomDirect,DIRECT",
@@ -1007,6 +1012,8 @@ function main(config) {
 
       // LAN / 私有域名使用 Android 系统 DNS；国内公网域名继续使用国内 DoH。
       "rule-set:SKULL_Lan": [...LAN_DNS],
+      // 校时使用国内解析，避免境外 DoH 为 pool.ntp.org 选择远端服务器。
+      "+.pool.ntp.org": [...DOMESTIC_DNS],
       "rule-set:SKULL_CustomDirect": [...DOMESTIC_DNS],
       "rule-set:SKULL_CustomProxy": proxyDns("国外流量"),
       "rule-set:SKULL_China": [...DOMESTIC_DNS],
